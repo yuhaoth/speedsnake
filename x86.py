@@ -174,15 +174,29 @@ jump_opcodes = {
 }
 
 bmi_opcodes = {
+    'crc32':  (b'\xF2', b'\x0F\x38\xF1'),
     'popcnt': (b'\xF3', b'\x0F\xB8'),
+    'bsf':    (b'',     b'\x0F\xBC'),
     'tzcnt':  (b'\xF3', b'\x0F\xBC'),
+    'bsr':    (b'',     b'\x0F\xBD'),
     'lzcnt':  (b'\xF3', b'\x0F\xBD'),
 }
 
 sse_avx_opcodes = {
     'andps':    (b'',     b'\x0F',     b'\x54', 0),
+    'andnps':   (b'',     b'\x0F',     b'\x55', 0),
     'orps':     (b'',     b'\x0F',     b'\x56', 0),
     'xorps':    (b'',     b'\x0F',     b'\x57', 0),
+
+    'andpd':    (b'\x66', b'\x0F',     b'\x54', 0),
+    'andnpd':   (b'\x66', b'\x0F',     b'\x55', 0),
+    'orpd':     (b'\x66', b'\x0F',     b'\x56', 0),
+    'xorpd':    (b'\x66', b'\x0F',     b'\x57', 0),
+
+    'pand':     (b'\x66', b'\x0F',     b'\xDB', 0),
+    'pandn':    (b'\x66', b'\x0F',     b'\xDF', 0),
+    'por':      (b'\x66', b'\x0F',     b'\xEB', 0),
+    'pxor':     (b'\x66', b'\x0F',     b'\xEF', 0),
 
     'addps':    (b'',     b'\x0F',     b'\x58', 0),
     'addpd':    (b'\x66', b'\x0F',     b'\x58', 0),
@@ -219,6 +233,9 @@ sse_avx_opcodes = {
     'maxss':    (b'\xF3', b'\x0F',     b'\x5F', 0),
     'maxsd':    (b'\xF2', b'\x0F',     b'\x5F', 0),
 
+    'addsubps': (b'\xF2', b'\x0F',     b'\xD0', 0),
+    'addsubpd': (b'\x66', b'\x0F',     b'\xD0', 0),
+
     'paddd':    (b'\x66', b'\x0F',     b'\xFE', 0),
     'psubd':    (b'\x66', b'\x0F',     b'\xFA', 0),
     'pcmpeqd':  (b'\x66', b'\x0F',     b'\x76', 0),
@@ -237,6 +254,13 @@ sse_avx_opcodes = {
     'pmaxub':   (b'\x66', b'\x0F',     b'\xDE', 0),
     'pmaxuw':   (b'\x66', b'\x0F\x38', b'\x3E', 0),
     'pmaxud':   (b'\x66', b'\x0F\x38', b'\x3F', 0),
+
+    'psllw':    (b'\x66', b'\x0F',     b'\xF1', 0),
+    'pslld':    (b'\x66', b'\x0F',     b'\xF2', 0),
+    'psllq':    (b'\x66', b'\x0F',     b'\xF3', 0),
+    'psrlw':    (b'\x66', b'\x0F',     b'\xD1', 0),
+    'psrld':    (b'\x66', b'\x0F',     b'\xD2', 0),
+    'psrlq':    (b'\x66', b'\x0F',     b'\xD3', 0),
 
     'pmovsxbw': (b'\x66', b'\x0F\x38', b'\x20', 1),
     'pmovsxbd': (b'\x66', b'\x0F\x38', b'\x21', 1),
@@ -636,13 +660,23 @@ class Parser:
             return
         if name == 'push':
             assert len(args) == 1
-            reg = reg64_nums[args[0]]
-            self.code += rex(0, 0, 0, reg) + bytes([0x50 | (reg & 7)])
+            if args[0] == 'fs':
+                self.code += b'\x0F\xA0'
+            elif args[0] == 'gs':
+                self.code += b'\x0F\xA8'
+            else:
+                reg = reg64_nums[args[0]]
+                self.code += rex(0, 0, 0, reg) + bytes([0x50 | (reg & 7)])
             return
         if name == 'pop':
             assert len(args) == 1
-            reg = reg64_nums[args[0]]
-            self.code += rex(0, 0, 0, reg) + bytes([0x58 | (reg & 7)])
+            if args[0] == 'fs':
+                self.code += b'\x0F\xA1'
+            elif args[0] == 'gs':
+                self.code += b'\x0F\xA9'
+            else:
+                reg = reg64_nums[args[0]]
+                self.code += rex(0, 0, 0, reg) + bytes([0x58 | (reg & 7)])
             return
         if name in muldiv_opcodes:
             assert len(args) == 1
@@ -659,6 +693,12 @@ class Parser:
                 assert args[1] == 'dh'
                 assert r_dst <= 7 # dh is only usable w/o rex
                 self.code += b'\x0F\xB6' + mod_rm_reg(r_dst, 6)
+            return
+        if name == 'bswap':
+            assert len(args) == 1
+            w = args[0] in reg64_nums
+            reg = reg64_nums[args[0]] if w else reg32_nums[args[0]]
+            self.code += rex(w, 0, 0, reg) + b'\x0F' + bytes([0xC8 | (reg & 7)])
             return
 
         if name == 'andn':
