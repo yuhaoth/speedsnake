@@ -383,6 +383,9 @@ def rex(w, r, x, b):
     value = (w << 3) | ((r & 8) >> 1) | ((x & 8) >> 2) | ((b & 8) >> 3)
     return bytes([0x40 | value]) if value else b''
 
+def rex_addr(w, r, a):
+    return rex(w, r, a.index, a.base)
+
 def vex(w, r, x, b, p, m, l, v=0):
     r &= 8
     x &= 8
@@ -579,7 +582,7 @@ class Parser:
                 else:
                     self.code += rex(w, 0, 0, r_dst) + bytes([0xB8 | (r_dst & 7)]) + struct.pack('<i', args[1])
             elif isinstance(args[1], Address):
-                self.code += rex(w, r_dst, args[1].index, args[1].base) + b'\x8B' + mod_rm_addr(r_dst, args[1])
+                self.code += rex_addr(w, r_dst, args[1]) + b'\x8B' + mod_rm_addr(r_dst, args[1])
             else:
                 r_src = reg64_nums[args[1]] if w else reg32_nums[args[1]]
                 self.code += rex(w, r_src, 0, r_dst) + b'\x89' + mod_rm_reg(r_src, r_dst)
@@ -588,7 +591,7 @@ class Parser:
             assert len(args) == 2
             w = args[0] in reg64_nums
             r_src = reg64_nums[args[0]] if w else reg32_nums[args[0]]
-            self.code += rex(w, r_src, args[1].index, args[1].base) + b'\x89' + mod_rm_addr(r_src, args[1])
+            self.code += rex_addr(w, r_src, args[1]) + b'\x89' + mod_rm_addr(r_src, args[1])
             return
 
         if name in basic_opcodes:
@@ -598,7 +601,7 @@ class Parser:
                 w = args[1] in reg64_nums
                 r_src = reg64_nums[args[1]] if w else reg32_nums[args[1]]
                 opcode = bytes([1 | (opcode << 3)])
-                self.code += rex(w, r_src, args[0].index, args[0].base) + opcode + mod_rm_addr(r_src, args[0])
+                self.code += rex_addr(w, r_src, args[0]) + opcode + mod_rm_addr(r_src, args[0])
             else:
                 w = args[0] in reg64_nums
                 r_dst = reg64_nums[args[0]] if w else reg32_nums[args[0]]
@@ -609,7 +612,7 @@ class Parser:
                         self.code += rex(w, 0, 0, r_dst) + b'\x81' + mod_rm_reg(opcode, r_dst) + struct.pack('<i', args[1])
                 elif isinstance(args[1], Address):
                     opcode = bytes([3 | (opcode << 3)])
-                    self.code += rex(w, r_dst, args[1].index, args[1].base) + opcode + mod_rm_addr(r_dst, args[1])
+                    self.code += rex_addr(w, r_dst, args[1]) + opcode + mod_rm_addr(r_dst, args[1])
                 else:
                     r_src = reg64_nums[args[1]] if w else reg32_nums[args[1]]
                     opcode = bytes([1 | (opcode << 3)])
@@ -626,7 +629,7 @@ class Parser:
                 else:
                     self.code += rex(w, 0, 0, r_dst) + b'\xF7' + mod_rm_reg(0, r_dst) + struct.pack('<I', args[1])
             elif isinstance(args[1], Address):
-                self.code += rex(w, r_dst, args[1].index, args[1].base) + b'\x85' + mod_rm_addr(r_dst, args[1])
+                self.code += rex_addr(w, r_dst, args[1]) + b'\x85' + mod_rm_addr(r_dst, args[1])
             else:
                 r_src = reg64_nums[args[1]] if w else reg32_nums[args[1]]
                 self.code += rex(w, r_src, 0, r_dst) + b'\x85' + mod_rm_reg(r_src, r_dst)
@@ -645,7 +648,7 @@ class Parser:
             w = args[0] in reg64_nums
             r_dst = reg64_nums[args[0]] if w else reg32_nums[args[0]]
             if isinstance(args[1], Address):
-                self.code += rex(w, r_dst, args[1].index, args[1].base) + opcode + mod_rm_addr(r_dst, args[1])
+                self.code += rex_addr(w, r_dst, args[1]) + opcode + mod_rm_addr(r_dst, args[1])
             else:
                 r_src = reg64_nums[args[1]] if w else reg32_nums[args[1]]
                 self.code += rex(w, r_dst, 0, r_src) + opcode + mod_rm_reg(r_dst, r_src)
@@ -657,7 +660,7 @@ class Parser:
             w = args[0] in reg64_nums
             r_dst = reg64_nums[args[0]] if w else reg32_nums[args[0]]
             if isinstance(args[1], Address):
-                self.code += prefix + rex(w, r_dst, args[1].index, args[1].base) + opcode + mod_rm_addr(r_dst, args[1])
+                self.code += prefix + rex_addr(w, r_dst, args[1]) + opcode + mod_rm_addr(r_dst, args[1])
             else:
                 r_src = reg64_nums[args[1]] if w else reg32_nums[args[1]]
                 self.code += prefix + rex(w, r_dst, 0, r_src) + opcode + mod_rm_reg(r_dst, r_src)
@@ -734,7 +737,7 @@ class Parser:
                 assert isinstance(args[2], int)
             r_dst = xmm_reg_nums[args[0]]
             if isinstance(args[1], Address):
-                self.code += prefix + rex(0, r_dst, args[1].index, args[1].base) + opcode + mod_rm_addr(r_dst, args[1])
+                self.code += prefix + rex_addr(0, r_dst, args[1]) + opcode + mod_rm_addr(r_dst, args[1])
             else:
                 r_src = xmm_reg_nums[args[1]]
                 self.code += prefix + rex(0, r_dst, 0, r_src) + opcode + mod_rm_reg(r_dst, r_src)
@@ -742,25 +745,37 @@ class Parser:
                 self.code += bytes([args[2]])
             return
 
-        if name == 'cvtss2si':
+        if name in {'cvtss2si', 'cvtsd2si'}:
             assert len(args) == 2
-            self.code += b'\xF3' + rex(1, 0, 0, 0) + b'\x0F\x2D' + mod_rm_reg(reg64_nums[args[0]], xmm_reg_nums[args[1]])
+            prefix = b'\xF3' if name == 'cvtss2si' else b'\xF2'
+            w = args[0] in reg64_nums
+            r_dst = reg64_nums[args[0]] if w else reg32_nums[args[0]]
+            r_src = xmm_reg_nums[args[1]]
+            self.code += prefix + rex(w, r_dst, 0, r_src) + b'\x0F\x2D' + mod_rm_reg(r_dst, r_src)
             return
-        if name == 'cvtsd2si':
+        if name in {'cvtsi2ss', 'cvtsi2sd'}:
             assert len(args) == 2
-            self.code += b'\xF2' + rex(1, 0, 0, 0) + b'\x0F\x2D' + mod_rm_reg(reg64_nums[args[0]], xmm_reg_nums[args[1]])
+            prefix = b'\xF3' if name == 'cvtsi2ss' else b'\xF2'
+            w = args[1] in reg64_nums
+            r_dst = xmm_reg_nums[args[0]]
+            r_src = reg64_nums[args[1]] if w else reg32_nums[args[1]]
+            self.code += prefix + rex(w, r_dst, 0, r_src) + b'\x0F\x2A' + mod_rm_reg(r_dst, r_src)
             return
-        if name == 'cvtsi2ss':
+        if name in {'cvttss2si', 'cvttsd2si'}:
             assert len(args) == 2
-            self.code += b'\xF3' + rex(1, 0, 0, 0) + b'\x0F\x2A' + mod_rm_reg(xmm_reg_nums[args[0]], reg64_nums[args[1]])
+            prefix = b'\xF3' if name == 'cvttss2si' else b'\xF2'
+            w = args[0] in reg64_nums
+            r_dst = reg64_nums[args[0]] if w else reg32_nums[args[0]]
+            r_src = xmm_reg_nums[args[1]]
+            self.code += prefix + rex(w, r_dst, 0, r_src) + b'\x0F\x2C' + mod_rm_reg(r_dst, r_src)
             return
         if name == 'ldmxcsr':
             assert len(args) == 1
-            self.code += b'\x0F\xAE' + mod_rm_addr(2, args[0])
+            self.code += rex_addr(0, 0, args[0]) + b'\x0F\xAE' + mod_rm_addr(2, args[0])
             return
         if name == 'stmxcsr':
             assert len(args) == 1
-            self.code += b'\x0F\xAE' + mod_rm_addr(3, args[0])
+            self.code += rex_addr(0, 0, args[0]) + b'\x0F\xAE' + mod_rm_addr(3, args[0])
             return
         if name == 'push':
             assert len(args) == 1
