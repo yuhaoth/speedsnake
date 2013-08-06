@@ -211,8 +211,6 @@ sse_avx_opcodes = {
     'orpd':     (b'\x66', b'\x0F',     b'\x56', 0),
     'xorpd':    (b'\x66', b'\x0F',     b'\x57', 0),
 
-    'pand':     (b'\x66', b'\x0F',     b'\xDB', 0),
-    'pandn':    (b'\x66', b'\x0F',     b'\xDF', 0),
     'por':      (b'\x66', b'\x0F',     b'\xEB', 0),
     'pxor':     (b'\x66', b'\x0F',     b'\xEF', 0),
 
@@ -254,19 +252,49 @@ sse_avx_opcodes = {
     'addsubps': (b'\xF2', b'\x0F',     b'\xD0', 0),
     'addsubpd': (b'\x66', b'\x0F',     b'\xD0', 0),
 
+    'pabsb':    (b'\x66', b'\x0F\x38', b'\x1C', 1),
+    'pabsw':    (b'\x66', b'\x0F\x38', b'\x1D', 1),
+    'pabsd':    (b'\x66', b'\x0F\x38', b'\x1E', 1),
+    'packsswb': (b'\x66', b'\x0F',     b'\x63', 0),
+    'packssdw': (b'\x66', b'\x0F',     b'\x6B', 0),
+    'packuswb': (b'\x66', b'\x0F',     b'\x67', 0),
+    'packusdw': (b'\x66', b'\x0F\x38', b'\x2B', 0),
     'paddb':    (b'\x66', b'\x0F',     b'\xFC', 0),
     'paddw':    (b'\x66', b'\x0F',     b'\xFD', 0),
     'paddd':    (b'\x66', b'\x0F',     b'\xFE', 0),
     'paddq':    (b'\x66', b'\x0F',     b'\xD4', 0),
-    'psubd':    (b'\x66', b'\x0F',     b'\xFA', 0),
+    'paddsb':   (b'\x66', b'\x0F',     b'\xEC', 0),
+    'paddsw':   (b'\x66', b'\x0F',     b'\xED', 0),
+    'paddusb':  (b'\x66', b'\x0F',     b'\xDC', 0),
+    'paddusw':  (b'\x66', b'\x0F',     b'\xDD', 0),
+    # XXX palignr
+    'pand':     (b'\x66', b'\x0F',     b'\xDB', 0),
+    'pandn':    (b'\x66', b'\x0F',     b'\xDF', 0),
+    'pavgb':    (b'\x66', b'\x0F',     b'\xE0', 0),
+    'pavgw':    (b'\x66', b'\x0F',     b'\xE3', 0),
+    # XXX pblendvb
+    # XXX pblendw
+    # XXX pclmulqdq
     'pcmpeqb':  (b'\x66', b'\x0F',     b'\x74', 0),
     'pcmpeqw':  (b'\x66', b'\x0F',     b'\x75', 0),
     'pcmpeqd':  (b'\x66', b'\x0F',     b'\x76', 0),
     'pcmpeqq':  (b'\x66', b'\x0F\x38', b'\x29', 0),
+    # XXX pcmpestri/pcmpestrm
     'pcmpgtb':  (b'\x66', b'\x0F',     b'\x64', 0),
     'pcmpgtw':  (b'\x66', b'\x0F',     b'\x65', 0),
     'pcmpgtd':  (b'\x66', b'\x0F',     b'\x66', 0),
     'pcmpgtq':  (b'\x66', b'\x0F\x38', b'\x37', 0),
+    # XXX pcmpistri/pcmpistrm
+    # XXX pextrb/pextrw/pextrd/pextrq
+    'phaddw':   (b'\x66', b'\x0F\x38', b'\x01', 0),
+    'phaddd':   (b'\x66', b'\x0F\x38', b'\x02', 0),
+    'phaddsw':  (b'\x66', b'\x0F\x38', b'\x03', 0),
+    # XXX continue through the packed integer instructions
+
+    'psubb':    (b'\x66', b'\x0F',     b'\xF8', 0),
+    'psubw':    (b'\x66', b'\x0F',     b'\xF9', 0),
+    'psubd':    (b'\x66', b'\x0F',     b'\xFA', 0),
+    'psubq':    (b'\x66', b'\x0F',     b'\xFB', 0),
     'pmulld':   (b'\x66', b'\x0F\x38', b'\x40', 0),
 
     'pminsb':   (b'\x66', b'\x0F\x38', b'\x38', 0),
