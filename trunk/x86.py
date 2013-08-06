@@ -403,7 +403,7 @@ def mod_rm_addr(reg, a):
         assert a.index == 0 # if no scale, must have no index
         if a.base == 'rip':
             return bytes([((reg & 7) << 3) | 5]) + struct.pack('<i', a.disp)
-        elif a.base == 4:
+        elif (a.base & 7) == 4: # RSP/R12 base must be encoded with SIB
             if not a.disp:
                 return bytes([((reg & 7) << 3) | 4, 0x24])
             elif -128 <= a.disp <= 127:
@@ -411,7 +411,7 @@ def mod_rm_addr(reg, a):
             else:
                 return bytes([0x80 | ((reg & 7) << 3) | 4, 0x24]) + struct.pack('<i', a.disp)
         else:
-            if not a.disp:
+            if not a.disp and (a.base & 7) != 5: # RBP/R13 base must be encoded with at least a disp8
                 return bytes([((reg & 7) << 3) | (a.base & 7)])
             elif -128 <= a.disp <= 127:
                 return bytes([0x40 | ((reg & 7) << 3) | (a.base & 7)]) + struct.pack('<b', a.disp)
@@ -421,7 +421,7 @@ def mod_rm_addr(reg, a):
         assert a.base != 'rip' # base cannot be RIP with an index
         assert a.index != 4 # index can never be the stack pointer
         log_scale = log_scale_table[a.scale]
-        if not a.disp:
+        if not a.disp and (a.base & 7) != 5: # RBP/R13 base must be encoded with at least a disp8
             return bytes([((reg & 7) << 3) | 4, (log_scale << 6) | ((a.index & 7) << 3) | (a.base & 7)])
         elif -128 <= a.disp <= 127:
             return bytes([0x40 | ((reg & 7) << 3) | 4, (log_scale << 6) | ((a.index & 7) << 3) | (a.base & 7)]) + struct.pack('<b', a.disp)
