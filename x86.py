@@ -77,7 +77,7 @@ def make_obj(filename, labels, globals, code):
         0x18664, 0, 0x3C + len(code), 5 + len(labels), 0, 0x65646F63, 0, 0, 0, len(code), 0x3C, 0x3C + len(code), 0, 0, 0x60500020)
     obj_file += code
     obj_file += bytes.fromhex('2E 66 69 6C 65 00 00 00 00 00 00 00 FE FF 00 00 67 01')
-    filename = filename.encode()
+    filename = filename.encode()[:18] # just gets truncated after 18 bytes
     obj_file += filename + bytes(18-len(filename))
     obj_file += bytes.fromhex('63 6F 64 65 00 00 00 00 00 00 00 00 01 00 00 00 03 01')
     obj_file += struct.pack('<I', len(code))
