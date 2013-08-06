@@ -687,12 +687,10 @@ class Parser:
         if name == 'movzx':
             assert len(args) == 2
             r_dst = reg32_nums[args[0]]
-            if args[1] == 'dl':
-                self.code += rex(0, r_dst, 0, 0) + b'\x0F\xB6' + mod_rm_reg(r_dst, 2)
-            else:
-                assert args[1] == 'dh'
-                assert r_dst <= 7 # dh is only usable w/o rex
-                self.code += b'\x0F\xB6' + mod_rm_reg(r_dst, 6)
+            r_src = reg8_nums[args[1]]
+            if r_src >= 4:
+                assert r_dst <= 7 # high parts are only usable without rex
+            self.code += rex(0, r_dst, 0, 0) + b'\x0F\xB6' + mod_rm_reg(r_dst, r_src)
             return
         if name == 'bswap':
             assert len(args) == 1
