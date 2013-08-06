@@ -472,12 +472,6 @@ class Parser:
             self.labels.append((line[:-1], len(self.code)))
             return # XXX skip
 
-        line = line.replace('+0*16]', '+0]')
-        line = line.replace('+1*16]', '+16]')
-        line = line.replace('+2*16]', '+32]')
-        line = line.replace('+3*16]', '+48]')
-        line = line.replace('4*16', '64')
-
         tokens = []
         pos = line_start = 0
         mo = r(line)
@@ -508,6 +502,12 @@ class Parser:
                     macro_line = macro_line.replace('%%%d' % (i+1), tokens[2*i+1])
                 self.line_to_code(macro_line)
             return
+
+        # hacky constant folding -- would be easier if we generated a better parse tree
+        if '*' in tokens:
+            i = tokens.index('*')
+            if isinstance(tokens[i-1], int) and isinstance(tokens[i+1], int):
+                tokens[i-1:i+2] = [tokens[i-1] * tokens[i+1]]
 
         # parse address expressions
         if '[' in tokens:
