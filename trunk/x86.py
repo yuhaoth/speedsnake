@@ -20,6 +20,8 @@
 
 # This is a quick and dirty x86-64 assembler written entirely in Python.  It is not a full
 # implementation of x86 -- it has a number of significant limitations and missing instructions.
+# We intend to fix most of those limitations, with the exception of x87 and MMX, which we do not
+# expect to ever support.  Also, at present, there are no plans to support 16-bit or 32-bit mode.
 
 import argparse
 import re
@@ -110,7 +112,34 @@ for i in range(8, 16):
 xmm_reg_nums = {'xmm%d' % i: i for i in range(16)}
 ymm_reg_nums = {'ymm%d' % i: i for i in range(16)}
 
+conditions = {
+    'a':  0x7,
+    'ae': 0x3,
+    'b':  0x2,
+    'be': 0x6,
+    'c':  0x2,
+    'e':  0x4,
+    'g':  0xF,
+    'ge': 0xD,
+    'l':  0xC,
+    'le': 0xE,
+    'nc': 0x3,
+    'ne': 0x5,
+    'no': 0x1,
+    'np': 0xB,
+    'ns': 0x9,
+    'nz': 0x5,
+    'o':  0x0,
+    'p':  0xA,
+    's':  0x8,
+    'z':  0x4,
+}
+
 trivial_opcodes = {
+    'insb': b'\x6C',
+    'insd': b'\x6D',
+    'outsb': b'\x6E',
+    'outsd': b'\x6F',
     'pause': b'\xF3\x90',
     'nop':   b'\x90',
     'pushf': b'\x9C',
@@ -148,38 +177,27 @@ trivial_opcodes = {
 basic_opcodes = {'add': 0, 'or': 1, 'adc': 2, 'sbb': 3, 'and': 4, 'sub': 5, 'xor': 6, 'cmp': 7}
 shift_opcodes = {'rol': 0, 'ror': 1, 'shl': 4, 'shr': 5, 'sar': 7}
 muldiv_opcodes = {'not': 2, 'neg': 3, 'mul': 4, 'imul': 5, 'div': 6, 'idiv': 7}
-
-jump_opcodes = {
-    'jmp': b'\xEB',
-    'ja':  b'\x77',
-    'jae': b'\x73',
-    'jb':  b'\x72',
-    'jbe': b'\x76',
-    'jc':  b'\x72',
-    'je':  b'\x74',
-    'jg':  b'\x7F',
-    'jge': b'\x7D',
-    'jl':  b'\x7C',
-    'jle': b'\x7E',
-    'jnc': b'\x73',
-    'jne': b'\x75',
-    'jno': b'\x71',
-    'jnp': b'\x7B',
-    'jns': b'\x79',
-    'jnz': b'\x75',
-    'jo':  b'\x70',
-    'jp':  b'\x7A',
-    'js':  b'\x78',
-    'jz':  b'\x74',
-}
+cmov_opcodes = {'cmov%s' % cond: bytes([0x0F, 0x40 | opcode]) for (cond, opcode) in conditions.items()}
+jump_opcodes = {'j%s' % cond: bytes([0x70 | opcode]) for (cond, opcode) in conditions.items()}
+jump_opcodes['jmp'] = b'\xEB'
 
 bmi_opcodes = {
-    'crc32':  (b'\xF2', b'\x0F\x38\xF1'),
+    'crc32':  (b'\xF2', b'\x0F\x38\xF1'), # XXX 8-bit source variant
     'popcnt': (b'\xF3', b'\x0F\xB8'),
     'bsf':    (b'',     b'\x0F\xBC'),
     'tzcnt':  (b'\xF3', b'\x0F\xBC'),
     'bsr':    (b'',     b'\x0F\xBD'),
     'lzcnt':  (b'\xF3', b'\x0F\xBD'),
+}
+bmi_vex_opcodes = {
+    'andn':   (0, 2, b'\xF2'),
+    'bextr':  (0, 2, b'\xF7'),
+    'bzhi':   (0, 2, b'\xF5'),
+    'pdep':   (3, 2, b'\xF5'),
+    'pext':   (2, 2, b'\xF5'),
+    'sarx':   (2, 2, b'\xF7'),
+    'shlx':   (1, 2, b'\xF7'),
+    'shrx':   (3, 2, b'\xF7'),
 }
 
 sse_avx_opcodes = {
@@ -236,10 +254,19 @@ sse_avx_opcodes = {
     'addsubps': (b'\xF2', b'\x0F',     b'\xD0', 0),
     'addsubpd': (b'\x66', b'\x0F',     b'\xD0', 0),
 
+    'paddb':    (b'\x66', b'\x0F',     b'\xFC', 0),
+    'paddw':    (b'\x66', b'\x0F',     b'\xFD', 0),
     'paddd':    (b'\x66', b'\x0F',     b'\xFE', 0),
+    'paddq':    (b'\x66', b'\x0F',     b'\xD4', 0),
     'psubd':    (b'\x66', b'\x0F',     b'\xFA', 0),
+    'pcmpeqb':  (b'\x66', b'\x0F',     b'\x74', 0),
+    'pcmpeqw':  (b'\x66', b'\x0F',     b'\x75', 0),
     'pcmpeqd':  (b'\x66', b'\x0F',     b'\x76', 0),
+    'pcmpeqq':  (b'\x66', b'\x0F\x38', b'\x29', 0),
+    'pcmpgtb':  (b'\x66', b'\x0F',     b'\x64', 0),
+    'pcmpgtw':  (b'\x66', b'\x0F',     b'\x65', 0),
     'pcmpgtd':  (b'\x66', b'\x0F',     b'\x66', 0),
+    'pcmpgtq':  (b'\x66', b'\x0F\x38', b'\x37', 0),
     'pmulld':   (b'\x66', b'\x0F\x38', b'\x40', 0),
 
     'pminsb':   (b'\x66', b'\x0F\x38', b'\x38', 0),
@@ -284,6 +311,17 @@ sse_avx_opcodes = {
 
     'movaps':   (b'',     b'\x0F',     b'\x28', 1),
     'storeaps': (b'',     b'\x0F',     b'\x29', 1),
+    'movups':   (b'',     b'\x0F',     b'\x10', 1),
+    'storeups': (b'',     b'\x0F',     b'\x11', 1),
+    'movdqa':   (b'\x66', b'\x0F',     b'\x6F', 1),
+    'storedqa': (b'\x66', b'\x0F',     b'\x7F', 1),
+    'movdqu':   (b'\xF3', b'\x0F',     b'\x6F', 1),
+    'storedqu': (b'\xF3', b'\x0F',     b'\x7F', 1),
+
+    'aesdec':     (b'\x66', b'\x0F\x38', b'\xDE', 0), # XXX prohibit YMM register version
+    'aesdeclast': (b'\x66', b'\x0F\x38', b'\xDF', 0), # XXX prohibit YMM register version
+    'aesenc':     (b'\x66', b'\x0F\x38', b'\xDC', 0), # XXX prohibit YMM register version
+    'aesenclast': (b'\x66', b'\x0F\x38', b'\xDD', 0), # XXX prohibit YMM register version
 }
 
 sse_compare_functions = {'eq': 0, 'lt': 1, 'le': 2, 'unord': 3, 'neq': 4, 'nlt': 5, 'nle': 6, 'ord': 7}
@@ -297,16 +335,21 @@ sse_opcodes = {
     'blendvps': (b'\x66', b'\x0F\x38\x14', 0),
 }
 avx_opcodes = {
-    #               p  m  opcode   template
-    'vinsertf128': (1, 3, b'\x18', 4),
-    'vmaskmovps':  (1, 2, b'\x2E', 5),
+    #               w  p  m  opcode   template
+    'vinsertf128': (0, 1, 3, b'\x18', 4),
+    'vmaskmovps':  (0, 1, 2, b'\x2E', 5),
+    'vpsllvd':     (0, 1, 2, b'\x47', 0),
+    'vpsllvq':     (1, 1, 2, b'\x47', 0),
+    'vpsravd':     (0, 1, 2, b'\x46', 0),
+    'vpsrlvd':     (0, 1, 2, b'\x45', 0),
+    'vpsrlvq':     (1, 1, 2, b'\x45', 0),
 }
 
 avx_p_table = {b'': 0, b'\x66': 1, b'\xF3': 2, b'\xF2': 3}
 avx_m_table = {b'\x0F': 1, b'\x0F\x38': 2}
 for (name, (prefix, opcode_prefix, opcode, template)) in sse_avx_opcodes.items():
     sse_opcodes[name] = (prefix, opcode_prefix + opcode, template)
-    avx_opcodes['v' + name] = (avx_p_table[prefix], avx_m_table[opcode_prefix], opcode, template)
+    avx_opcodes['v' + name] = (0, avx_p_table[prefix], avx_m_table[opcode_prefix], opcode, template)
 
 def rex(w, r, x, b):
     value = (w << 3) | ((r & 8) >> 1) | ((x & 8) >> 2) | ((b & 8) >> 3)
@@ -478,6 +521,13 @@ class Parser:
                 assert tokens[i] == ','
             args = tokens[1::2]
 
+        # convert stores to a different opcode name so we can look them up more easily
+        if name in {'movaps', 'vmovaps', 'movups', 'vmovups', 'movdqa', 'vmovdqa',
+                    'movdqu', 'vmovdqu', 'mov'} and isinstance(args[0], Address):
+            assert len(args) == 2
+            name = name.replace('mov', 'store')
+            args = [args[1], args[0]]
+        
         if name in trivial_opcodes:
             assert not args
             self.code += trivial_opcodes[name]
@@ -493,55 +543,84 @@ class Parser:
 
         if name == 'mov':
             assert len(args) == 2
+            w = args[0] in reg64_nums
+            r_dst = reg64_nums[args[0]] if w else reg32_nums[args[0]]
             if isinstance(args[1], int):
-                if args[0] in reg64_nums:
-                    self.code += b'\x48' + bytes([0xB8 | reg64_nums[args[0]]]) + struct.pack('<q', args[1])
+                if w:
+                    self.code += rex(w, 0, 0, r_dst) + bytes([0xB8 | (r_dst & 7)]) + struct.pack('<q', args[1])
                 else:
-                    self.code += bytes([0xB8 | reg32_nums[args[0]]]) + struct.pack('<i', args[1])
+                    self.code += rex(w, 0, 0, r_dst) + bytes([0xB8 | (r_dst & 7)]) + struct.pack('<i', args[1])
+            elif isinstance(args[1], Address):
+                self.code += rex(w, r_dst, args[1].index, args[1].base) + b'\x8B' + mod_rm_addr(r_dst, args[1])
             else:
-                if args[0] in reg64_nums:
-                    self.code += b'\x48\x89' + mod_rm_reg(reg64_nums[args[1]], reg64_nums[args[0]])
-                else:
-                    self.code += b'\x89' + mod_rm_reg(reg32_nums[args[1]], reg32_nums[args[0]])
+                r_src = reg64_nums[args[1]] if w else reg32_nums[args[1]]
+                self.code += rex(w, r_src, 0, r_dst) + b'\x89' + mod_rm_reg(r_src, r_dst)
+            return
+        if name == 'store':
+            assert len(args) == 2
+            w = args[0] in reg64_nums
+            r_src = reg64_nums[args[0]] if w else reg32_nums[args[0]]
+            self.code += rex(w, r_src, args[1].index, args[1].base) + b'\x89' + mod_rm_addr(r_src, args[1])
             return
 
         if name in basic_opcodes:
             assert len(args) == 2
             opcode = basic_opcodes[name]
-            if isinstance(args[1], int):
-                if args[0] in reg64_nums:
-                    rm_reg = reg64_nums[args[0]]
-                    rex_byte = rex(1, 0, 0, rm_reg)
-                else:
-                    rm_reg = reg32_nums[args[0]]
-                    rex_byte = rex(0, 0, 0, rm_reg)
-                self.code += rex_byte + b'\x83' + mod_rm_reg(opcode, rm_reg) + bytes([args[1]])
-            else:
+            if isinstance(args[0], Address):
+                w = args[1] in reg64_nums
+                r_src = reg64_nums[args[1]] if w else reg32_nums[args[1]]
                 opcode = bytes([1 | (opcode << 3)])
-                if args[0] in reg64_nums:
-                    self.code += rex(1, 0, 0, 0) + opcode + mod_rm_reg(reg64_nums[args[1]], reg64_nums[args[0]])
+                self.code += rex(w, r_src, args[0].index, args[0].base) + opcode + mod_rm_addr(r_src, args[0])
+            else:
+                w = args[0] in reg64_nums
+                r_dst = reg64_nums[args[0]] if w else reg32_nums[args[0]]
+                if isinstance(args[1], int):
+                    if -128 <= args[1] <= 127:
+                        self.code += rex(w, 0, 0, r_dst) + b'\x83' + mod_rm_reg(opcode, r_dst) + struct.pack('<b', args[1])
+                    else:
+                        self.code += rex(w, 0, 0, r_dst) + b'\x81' + mod_rm_reg(opcode, r_dst) + struct.pack('<i', args[1])
+                elif isinstance(args[1], Address):
+                    opcode = bytes([3 | (opcode << 3)])
+                    self.code += rex(w, r_dst, args[1].index, args[1].base) + opcode + mod_rm_addr(r_dst, args[1])
                 else:
-                    self.code += opcode + mod_rm_reg(reg32_nums[args[1]], reg32_nums[args[0]])
+                    r_src = reg64_nums[args[1]] if w else reg32_nums[args[1]]
+                    opcode = bytes([1 | (opcode << 3)])
+                    self.code += rex(w, r_src, 0, r_dst) + opcode + mod_rm_reg(r_src, r_dst)
             return
 
         if name == 'test':
             assert len(args) == 2
+            w = args[0] in reg64_nums
+            r_dst = reg64_nums[args[0]] if w else reg32_nums[args[0]]
             if isinstance(args[1], int):
-                if args[0] in reg64_nums:
-                    rm_reg = reg64_nums[args[0]]
-                    rex_byte = rex(1, 0, 0, rm_reg)
+                if r_dst == 0: # special case saves a byte on AX
+                    self.code += rex(w, 0, 0, r_dst) + b'\xA9' + struct.pack('<I', args[1])
                 else:
-                    rm_reg = reg32_nums[args[0]]
-                    rex_byte = rex(0, 0, 0, rm_reg)
-                if rm_reg == 0: # special case saves a byte on AX
-                    self.code += rex_byte + b'\xA9' + struct.pack('<I', args[1])
-                else:
-                    self.code += rex_byte + b'\xF7' + mod_rm_reg(0, rm_reg) + struct.pack('<I', args[1])
+                    self.code += rex(w, 0, 0, r_dst) + b'\xF7' + mod_rm_reg(0, r_dst) + struct.pack('<I', args[1])
+            elif isinstance(args[1], Address):
+                self.code += rex(w, r_dst, args[1].index, args[1].base) + b'\x85' + mod_rm_addr(r_dst, args[1])
             else:
-                if args[0] in reg64_nums:
-                    self.code += b'\x48\x85' + mod_rm_reg(reg64_nums[args[1]], reg64_nums[args[0]])
-                else:
-                    self.code += b'\x85' + mod_rm_reg(reg32_nums[args[1]], reg32_nums[args[0]])
+                r_src = reg64_nums[args[1]] if w else reg32_nums[args[1]]
+                self.code += rex(w, r_src, 0, r_dst) + b'\x85' + mod_rm_reg(r_src, r_dst)
+            return
+
+        if name in {'inc', 'dec'}:
+            assert len(args) == 1
+            w = args[0] in reg64_nums
+            r_dst = reg64_nums[args[0]] if w else reg32_nums[args[0]]
+            self.code += rex(w, 0, 0, r_dst) + b'\xFF' + mod_rm_reg(0 if name == 'inc' else 1, r_dst)
+            return
+
+        if name in cmov_opcodes:
+            assert len(args) == 2
+            opcode = cmov_opcodes[name]
+            w = args[0] in reg64_nums
+            r_dst = reg64_nums[args[0]] if w else reg32_nums[args[0]]
+            if isinstance(args[1], Address):
+                self.code += rex(w, r_dst, args[1].index, args[1].base) + opcode + mod_rm_addr(r_dst, args[1])
+            else:
+                r_src = reg64_nums[args[1]] if w else reg32_nums[args[1]]
+                self.code += rex(w, r_dst, 0, r_src) + opcode + mod_rm_reg(r_dst, r_src)
             return
 
         if name in bmi_opcodes:
@@ -549,8 +628,11 @@ class Parser:
             (prefix, opcode) = bmi_opcodes[name]
             w = args[0] in reg64_nums
             r_dst = reg64_nums[args[0]] if w else reg32_nums[args[0]]
-            r_src = reg64_nums[args[1]] if w else reg32_nums[args[1]]
-            self.code += prefix + rex(w, r_dst, 0, r_src) + opcode + mod_rm_reg(r_dst, r_src)
+            if isinstance(args[1], Address):
+                self.code += prefix + rex(w, r_dst, args[1].index, args[1].base) + opcode + mod_rm_addr(r_dst, args[1])
+            else:
+                r_src = reg64_nums[args[1]] if w else reg32_nums[args[1]]
+                self.code += prefix + rex(w, r_dst, 0, r_src) + opcode + mod_rm_reg(r_dst, r_src)
             return
 
         if name in shift_opcodes:
@@ -589,6 +671,17 @@ class Parser:
                 r_src = reg32_nums[args[1]]
                 self.code += b'\x66' + rex(0, r_dst, 0, r_src) + b'\x0F\x6E' + mod_rm_reg(r_dst, r_src)
             return
+        if name == 'movq':
+            assert len(args) == 2
+            if args[0] in reg64_nums:
+                r_dst = reg64_nums[args[0]]
+                r_src = xmm_reg_nums[args[1]]
+                self.code += b'\x66' + rex(1, r_dst, 0, r_src) + b'\x0F\x7E' + mod_rm_reg(r_dst, r_src)
+            else:
+                r_dst = xmm_reg_nums[args[0]]
+                r_src = reg64_nums[args[1]]
+                self.code += b'\x66' + rex(1, r_dst, 0, r_src) + b'\x0F\x6E' + mod_rm_reg(r_dst, r_src)
+            return
         if name == 'vmovd':
             assert len(args) == 2
             assert args[0] not in reg32_nums
@@ -596,24 +689,7 @@ class Parser:
             r_src = reg32_nums[args[1]]
             self.code += vex(0, r_dst, 0, r_src, 1, 1, 0, 0) + b'\x6E' + mod_rm_reg(r_dst, r_src)
             return
-        if name == 'movq':
-            assert len(args) == 2
-            if args[0] in reg64_nums:
-                r_dst = reg64_nums[args[0]]
-                r_src = xmm_reg_nums[args[1]]
-                self.code += b'\x66' + rex(1, r_dst, 0, r_src) + b'\x0F\x7E' + mod_rm_reg(reg64_nums[args[0]], xmm_reg_nums[args[1]])
-            else:
-                r_dst = xmm_reg_nums[args[0]]
-                r_src = reg64_nums[args[1]]
-                self.code += b'\x66' + rex(1, r_dst, 0, r_src) + b'\x0F\x6E' + mod_rm_reg(xmm_reg_nums[args[0]], reg64_nums[args[1]])
-            return
 
-        # convert stores to a different opcode name so we can look them up more easily
-        if name in {'movaps', 'vmovaps'} and isinstance(args[0], Address):
-            assert len(args) == 2
-            name = name.replace('mov', 'store')
-            args = [args[1], args[0]]
-        
         if name == 'blendvps': # just chop off implicit xmm0 arg
             assert len(args) == 3 and args[2] == 'xmm0'
             args = args[0:2] # chop off implicit xmm0
@@ -684,13 +760,18 @@ class Parser:
             reg = reg64_nums[args[0]] if w else reg32_nums[args[0]]
             self.code += rex(w, 0, 0, reg) + b'\xF7' + mod_rm_reg(muldiv_opcodes[name], reg)
             return
-        if name == 'movzx':
+        if name in {'movzx', 'movsx'}:
             assert len(args) == 2
             r_dst = reg32_nums[args[0]]
-            r_src = reg8_nums[args[1]]
-            if r_src >= 4:
-                assert r_dst <= 7 # high parts are only usable without rex
-            self.code += rex(0, r_dst, 0, 0) + b'\x0F\xB6' + mod_rm_reg(r_dst, r_src)
+            if args[1] in reg8_nums:
+                r_src = reg8_nums[args[1]]
+                if r_src >= 4:
+                    assert r_dst <= 7 # high parts are only usable without rex
+                opcode = b'\x0F\xB6' if name == 'movzx' else b'\x0F\xBE'
+            else:
+                r_src = reg16_nums[args[1]]
+                opcode = b'\x0F\xB7' if name == 'movzx' else b'\x0F\xBF'
+            self.code += rex(0, r_dst, 0, 0) + opcode + mod_rm_reg(r_dst, r_src)
             return
         if name == 'bswap':
             assert len(args) == 1
@@ -699,9 +780,11 @@ class Parser:
             self.code += rex(w, 0, 0, reg) + b'\x0F' + bytes([0xC8 | (reg & 7)])
             return
 
-        if name == 'andn':
+        if name in bmi_vex_opcodes:
             assert len(args) == 3
-            (p, m, opcode) = (0, 2, b'\xF2')
+            (p, m, opcode) = bmi_vex_opcodes[name]
+            if name in {'bextr', 'bzhi', 'sarx', 'shlx', 'shrx'}:
+                args = [args[0], args[2], args[1]] # funny arg order
             w = args[0] in reg64_nums
             r_dst = reg64_nums[args[0]] if w else reg32_nums[args[0]]
             r_src0 = reg64_nums[args[1]] if w else reg32_nums[args[1]]
@@ -713,7 +796,7 @@ class Parser:
             return
 
         if name in avx_opcodes:
-            (p, m, opcode, template) = avx_opcodes[name]
+            (w, p, m, opcode, template) = avx_opcodes[name]
             if template == 0:
                 if len(args) == 2:
                     args = [args[0], args[0], args[1]]
@@ -722,20 +805,20 @@ class Parser:
                 r_dst = ymm_reg_nums[args[0]] if l else xmm_reg_nums[args[0]]
                 r_src0 = ymm_reg_nums[args[1]] if l else xmm_reg_nums[args[1]]
                 if isinstance(args[2], Address): # load-op
-                    self.code += vex(0, r_dst, args[2].index, args[2].base, p, m, l, r_src0) + opcode + mod_rm_addr(r_dst, args[2])
+                    self.code += vex(w, r_dst, args[2].index, args[2].base, p, m, l, r_src0) + opcode + mod_rm_addr(r_dst, args[2])
                 else:
                     r_src1 = ymm_reg_nums[args[2]] if l else xmm_reg_nums[args[2]]
-                    self.code += vex(0, r_dst, 0, r_src1, p, m, l, r_src0) + opcode + mod_rm_reg(r_dst, r_src1)
+                    self.code += vex(w, r_dst, 0, r_src1, p, m, l, r_src0) + opcode + mod_rm_reg(r_dst, r_src1)
                 return
             if template == 1:
                 assert len(args) == 2
                 l = args[0] in ymm_reg_nums
                 r_dst = ymm_reg_nums[args[0]] if l else xmm_reg_nums[args[0]]
                 if isinstance(args[1], Address): # load-op
-                    self.code += vex(0, r_dst, args[1].index, args[1].base, p, m, l) + opcode + mod_rm_addr(r_dst, args[1])
+                    self.code += vex(w, r_dst, args[1].index, args[1].base, p, m, l) + opcode + mod_rm_addr(r_dst, args[1])
                 else:
-                    r_src = xmm_reg_nums[args[1]]
-                    self.code += vex(0, r_dst, 0, r_src, p, m, l) + opcode + mod_rm_reg(r_dst, r_src)
+                    r_src = ymm_reg_nums[args[1]] if l else xmm_reg_nums[args[1]]
+                    self.code += vex(w, r_dst, 0, r_src, p, m, l) + opcode + mod_rm_reg(r_dst, r_src)
                 return
             if template == 2:
                 if len(args) == 3:
@@ -745,10 +828,10 @@ class Parser:
                 r_dst = ymm_reg_nums[args[0]] if l else xmm_reg_nums[args[0]]
                 r_src0 = ymm_reg_nums[args[1]] if l else xmm_reg_nums[args[1]]
                 if isinstance(args[2], Address): # load-op
-                    self.code += vex(0, r_dst, args[2].index, args[2].base, p, m, l, r_src0) + opcode + mod_rm_addr(r_dst, args[2])
+                    self.code += vex(w, r_dst, args[2].index, args[2].base, p, m, l, r_src0) + opcode + mod_rm_addr(r_dst, args[2])
                 else:
                     r_src1 = ymm_reg_nums[args[2]] if l else xmm_reg_nums[args[2]]
-                    self.code += vex(0, r_dst, 0, r_src1, p, m, l, r_src0) + opcode + mod_rm_reg(r_dst, r_src1)
+                    self.code += vex(w, r_dst, 0, r_src1, p, m, l, r_src0) + opcode + mod_rm_reg(r_dst, r_src1)
                 self.code += bytes([args[3]])
                 return
             if template == 3:
@@ -756,10 +839,10 @@ class Parser:
                 l = args[0] in ymm_reg_nums
                 r_dst = ymm_reg_nums[args[0]] if l else xmm_reg_nums[args[0]]
                 if isinstance(args[1], Address): # load-op
-                    self.code += vex(0, r_dst, args[1].index, args[1].base, p, m, l) + opcode + mod_rm_addr(r_dst, args[1])
+                    self.code += vex(w, r_dst, args[1].index, args[1].base, p, m, l) + opcode + mod_rm_addr(r_dst, args[1])
                 else:
                     r_src1 = ymm_reg_nums[args[1]] if l else xmm_reg_nums[args[1]]
-                    self.code += vex(0, r_dst, 0, r_src1, p, m, l) + opcode + mod_rm_reg(r_dst, r_src1)
+                    self.code += vex(w, r_dst, 0, r_src1, p, m, l) + opcode + mod_rm_reg(r_dst, r_src1)
                 self.code += bytes([args[2]])
                 return
             if name == 'vinsertf128':
@@ -768,14 +851,14 @@ class Parser:
                 r_dst = ymm_reg_nums[args[0]]
                 r_src0 = ymm_reg_nums[args[1]]
                 r_src1 = xmm_reg_nums[args[2]]
-                self.code += vex(0, r_dst, 0, r_src1, p, m, l, r_src0) + opcode + mod_rm_reg(r_dst, r_src1) + bytes([args[3]])
+                self.code += vex(w, r_dst, 0, r_src1, p, m, l, r_src0) + opcode + mod_rm_reg(r_dst, r_src1) + bytes([args[3]])
                 return
             if name == 'vmaskmovps':
                 assert len(args) == 3
                 l = args[1] in ymm_reg_nums
                 r_src0 = ymm_reg_nums[args[1]] if l else xmm_reg_nums[args[1]]
                 r_src1 = ymm_reg_nums[args[2]] if l else xmm_reg_nums[args[2]]
-                self.code += vex(0, r_src1, args[0].index, args[0].base, p, m, l, r_src0) + opcode + mod_rm_addr(r_src1, args[0])
+                self.code += vex(w, r_src1, args[0].index, args[0].base, p, m, l, r_src0) + opcode + mod_rm_addr(r_src1, args[0])
                 return
             raise RuntimeError("don't know how to parse line %s" % tokens)
 
@@ -815,6 +898,9 @@ def asm(filename, windows):
                 continue
             if line == '%ifdef _WIN32':
                 if_stack.append(windows)
+                continue
+            if line == '%ifndef _WIN32':
+                if_stack.append(not windows)
                 continue
             if line == '%else':
                 if if_stack[-2] == True:
