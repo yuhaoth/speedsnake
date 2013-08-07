@@ -101,11 +101,14 @@ def make_obj(filename, labels, globals, code):
         obj_file += name + b'\0'
     return obj_file
 
-reg8_nums =  {'al':  0, 'cl':  1, 'dl':  2, 'bl':  3, 'ah':  4, 'ch':  5, 'dh':  6, 'bh':  7}
-reg16_nums = {'ax':  0, 'cx':  1, 'dx':  2, 'bx':  3, 'sp':  4, 'bp':  5, 'si':  6, 'di':  7}
-reg32_nums = {'eax': 0, 'ecx': 1, 'edx': 2, 'ebx': 3, 'esp': 4, 'ebp': 5, 'esi': 6, 'edi': 7}
-reg64_nums = {'rax': 0, 'rcx': 1, 'rdx': 2, 'rbx': 3, 'rsp': 4, 'rbp': 5, 'rsi': 6, 'rdi': 7}
+reg8_hi_nums = {'ah':  4, 'ch':  5, 'dh':  6, 'bh':  7}
+reg8_nums    = {'al':  0, 'cl':  1, 'dl':  2, 'bl':  3, 'spl': 4, 'bpl': 5, 'sil': 6, 'dil': 7}
+reg16_nums   = {'ax':  0, 'cx':  1, 'dx':  2, 'bx':  3, 'sp':  4, 'bp':  5, 'si':  6, 'di':  7}
+reg32_nums   = {'eax': 0, 'ecx': 1, 'edx': 2, 'ebx': 3, 'esp': 4, 'ebp': 5, 'esi': 6, 'edi': 7}
+reg64_nums   = {'rax': 0, 'rcx': 1, 'rdx': 2, 'rbx': 3, 'rsp': 4, 'rbp': 5, 'rsi': 6, 'rdi': 7}
 for i in range(8, 16):
+    reg8_nums['r%db' % i] = i
+    reg16_nums['r%dw' % i] = i
     reg32_nums['r%dd' % i] = i
     reg64_nums['r%d' % i] = i
 
@@ -249,6 +252,13 @@ sse_avx_opcodes = {
     'maxss':    (b'\xF3', b'\x0F',     b'\x5F', 0),
     'maxsd':    (b'\xF2', b'\x0F',     b'\x5F', 0),
 
+    'cvtdq2pd': (b'\xF3', b'\x0F',     b'\xE6', 1), # XXX ymm variant has mixed xmm/ymm args
+    'cvtdq2ps': (b'',     b'\x0F',     b'\x5B', 1),
+    'cvtpd2dq': (b'\xF2', b'\x0F',     b'\xE6', 1), # XXX ymm variant has mixed xmm/ymm args
+    'cvtpd2ps': (b'\x66', b'\x0F',     b'\x5A', 1), # XXX ymm variant has mixed xmm/ymm args
+    'cvtps2dq': (b'\x66', b'\x0F',     b'\x5B', 1),
+    'cvtps2pd': (b'',     b'\x0F',     b'\x5A', 1), # XXX ymm variant has mixed xmm/ymm args
+
     'addsubps': (b'\xF2', b'\x0F',     b'\xD0', 0),
     'addsubpd': (b'\x66', b'\x0F',     b'\xD0', 0),
 
@@ -379,9 +389,9 @@ for (name, (prefix, opcode_prefix, opcode, template)) in sse_avx_opcodes.items()
     sse_opcodes[name] = (prefix, opcode_prefix + opcode, template)
     avx_opcodes['v' + name] = (0, avx_p_table[prefix], avx_m_table[opcode_prefix], opcode, template)
 
-def rex(w, r, x, b):
+def rex(w, r, x, b, force=0):
     value = (w << 3) | ((r & 8) >> 1) | ((x & 8) >> 2) | ((b & 8) >> 3)
-    return bytes([0x40 | value]) if value else b''
+    return bytes([0x40 | value]) if value or force else b''
 
 def rex_addr(w, r, a):
     return rex(w, r, a.index, a.base)
@@ -805,16 +815,34 @@ class Parser:
             return
         if name in {'movzx', 'movsx'}:
             assert len(args) == 2
-            r_dst = reg32_nums[args[0]]
-            if args[1] in reg8_nums:
-                r_src = reg8_nums[args[1]]
-                if r_src >= 4:
-                    assert r_dst <= 7 # high parts are only usable without rex
-                opcode = b'\x0F\xB6' if name == 'movzx' else b'\x0F\xBE'
+            w = args[0] in reg64_nums
+            force = 0
+            if w:
+                r_dst = reg64_nums[args[0]]
+                if args[1] in reg8_nums:
+                    r_src = reg8_nums[args[1]]
+                    opcode = b'\x0F\xB6' if name == 'movzx' else b'\x0F\xBE'
+                elif args[1] in reg16_nums:
+                    r_src = reg16_nums[args[1]]
+                    opcode = b'\x0F\xB7' if name == 'movzx' else b'\x0F\xBF'
+                else:
+                    r_src = reg32_nums[args[1]]
+                    assert name == 'movsx'
+                    opcode = b'\x63'
             else:
-                r_src = reg16_nums[args[1]]
-                opcode = b'\x0F\xB7' if name == 'movzx' else b'\x0F\xBF'
-            self.code += rex(0, r_dst, 0, 0) + opcode + mod_rm_reg(r_dst, r_src)
+                r_dst = reg32_nums[args[0]]
+                if args[1] in reg8_hi_nums:
+                    r_src = reg8_hi_nums[args[1]]
+                    assert r_dst < 8 # high parts are only usable without rex
+                    opcode = b'\x0F\xB6' if name == 'movzx' else b'\x0F\xBE'
+                elif args[1] in reg8_nums:
+                    r_src = reg8_nums[args[1]]
+                    force = r_src >= 4 # force REX when using "new" low regs
+                    opcode = b'\x0F\xB6' if name == 'movzx' else b'\x0F\xBE'
+                else:
+                    r_src = reg16_nums[args[1]]
+                    opcode = b'\x0F\xB7' if name == 'movzx' else b'\x0F\xBF'
+            self.code += rex(w, r_dst, 0, r_src, force) + opcode + mod_rm_reg(r_dst, r_src)
             return
         if name == 'bswap':
             assert len(args) == 1
