@@ -568,7 +568,7 @@ class Parser:
             assert len(args) == 2
             name = name.replace('mov', 'store')
             args = [args[1], args[0]]
-        
+
         if name in trivial_opcodes:
             assert not args
             self.code += trivial_opcodes[name]
@@ -1001,7 +1001,7 @@ def main():
     parser.add_argument('input_filename')
     parser.add_argument('output_filename')
     args = parser.parse_args()
-    
+
     out = asm(args.input_filename, args.windows)
     with open(args.output_filename, 'wb') as f:
         f.write(out)
