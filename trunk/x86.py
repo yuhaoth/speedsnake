@@ -743,38 +743,21 @@ class Parser:
                 self.code += bytes([0x0F, jump_opcodes[name][0] + 0x10]) + struct.pack('<i', disp)
             return
 
-        if name == 'movd':
+        if name in {'movd', 'movq', 'vmovd', 'vmovq'}:
             assert len(args) == 2
-            if args[0] in reg32_nums:
-                r_dst = reg32_nums[args[0]]
-                r_src = xmm_reg_nums[args[1]]
-                self.code += b'\x66' + rex(0, r_dst, 0, r_src) + b'\x0F\x7E' + mod_rm_reg(r_dst, r_src)
+            w = name in {'movq', 'vmovq'}
+            if args[0] in xmm_reg_nums:
+                r_xmm = xmm_reg_nums[args[0]]
+                r_gpr = reg64_nums[args[1]] if w else reg32_nums[args[1]]
+                opcode = b'\x6E'
             else:
-                r_dst = xmm_reg_nums[args[0]]
-                r_src = reg32_nums[args[1]]
-                self.code += b'\x66' + rex(0, r_dst, 0, r_src) + b'\x0F\x6E' + mod_rm_reg(r_dst, r_src)
-            return
-        if name == 'movq':
-            assert len(args) == 2
-            if args[0] in reg64_nums:
-                r_dst = reg64_nums[args[0]]
-                r_src = xmm_reg_nums[args[1]]
-                self.code += b'\x66' + rex(1, r_dst, 0, r_src) + b'\x0F\x7E' + mod_rm_reg(r_dst, r_src)
+                r_gpr = reg64_nums[args[0]] if w else reg32_nums[args[0]]
+                r_xmm = xmm_reg_nums[args[1]]
+                opcode = b'\x7E'
+            if name in {'movd', 'movq'}:
+                self.code += b'\x66' + rex(w, r_xmm, 0, r_gpr) + b'\x0F' + opcode + mod_rm_reg(r_xmm, r_gpr)
             else:
-                r_dst = xmm_reg_nums[args[0]]
-                r_src = reg64_nums[args[1]]
-                self.code += b'\x66' + rex(1, r_dst, 0, r_src) + b'\x0F\x6E' + mod_rm_reg(r_dst, r_src)
-            return
-        if name == 'vmovd':
-            assert len(args) == 2
-            if args[0] in reg32_nums:
-                r_dst = reg32_nums[args[0]]
-                r_src = xmm_reg_nums[args[1]]
-                self.code += vex(0, r_dst, 0, r_src, 1, 1, 0, 0) + b'\x7E' + mod_rm_reg(r_dst, r_src)
-            else:
-                r_dst = xmm_reg_nums[args[0]]
-                r_src = reg32_nums[args[1]]
-                self.code += vex(0, r_dst, 0, r_src, 1, 1, 0, 0) + b'\x6E' + mod_rm_reg(r_dst, r_src)
+                self.code += vex(w, r_xmm, 0, r_gpr, 1, 1, 0, 0) + opcode + mod_rm_reg(r_xmm, r_gpr)
             return
 
         if name == 'blendvps': # just chop off implicit xmm0 arg
