@@ -381,6 +381,48 @@ avx_opcodes = {
     'vpsravd':     (0, 1, 2, b'\x46', 0),
     'vpsrlvd':     (0, 1, 2, b'\x45', 0),
     'vpsrlvq':     (1, 1, 2, b'\x45', 0),
+
+    'vfmadd132pd': (1, 1, 2, b'\x98', 0),
+    'vfmadd132ps': (0, 1, 2, b'\x98', 0),
+    'vfmadd213pd': (1, 1, 2, b'\xA8', 0),
+    'vfmadd213ps': (0, 1, 2, b'\xA8', 0),
+    'vfmadd231pd': (1, 1, 2, b'\xB8', 0),
+    'vfmadd231ps': (0, 1, 2, b'\xB8', 0),
+
+    'vfnmadd132pd': (1, 1, 2, b'\x9C', 0),
+    'vfnmadd132ps': (0, 1, 2, b'\x9C', 0),
+    'vfnmadd213pd': (1, 1, 2, b'\xAC', 0),
+    'vfnmadd213ps': (0, 1, 2, b'\xAC', 0),
+    'vfnmadd231pd': (1, 1, 2, b'\xBC', 0),
+    'vfnmadd231ps': (0, 1, 2, b'\xBC', 0),
+
+    'vfmsub132pd': (1, 1, 2, b'\x9A', 0),
+    'vfmsub132ps': (0, 1, 2, b'\x9A', 0),
+    'vfmsub213pd': (1, 1, 2, b'\xAA', 0),
+    'vfmsub213ps': (0, 1, 2, b'\xAA', 0),
+    'vfmsub231pd': (1, 1, 2, b'\xBA', 0),
+    'vfmsub231ps': (0, 1, 2, b'\xBA', 0),
+
+    'vfnmsub132pd': (1, 1, 2, b'\x9E', 0),
+    'vfnmsub132ps': (0, 1, 2, b'\x9E', 0),
+    'vfnmsub213pd': (1, 1, 2, b'\xAE', 0),
+    'vfnmsub213ps': (0, 1, 2, b'\xAE', 0),
+    'vfnmsub231pd': (1, 1, 2, b'\xBE', 0),
+    'vfnmsub231ps': (0, 1, 2, b'\xBE', 0),
+
+    'vfmaddsub132pd': (1, 1, 2, b'\x96', 0),
+    'vfmaddsub132ps': (0, 1, 2, b'\x96', 0),
+    'vfmaddsub213pd': (1, 1, 2, b'\xA6', 0),
+    'vfmaddsub213ps': (0, 1, 2, b'\xA6', 0),
+    'vfmaddsub231pd': (1, 1, 2, b'\xB6', 0),
+    'vfmaddsub231ps': (0, 1, 2, b'\xB6', 0),
+
+    'vfmsubadd132pd': (1, 1, 2, b'\x97', 0),
+    'vfmsubadd132ps': (0, 1, 2, b'\x97', 0),
+    'vfmsubadd213pd': (1, 1, 2, b'\xA7', 0),
+    'vfmsubadd213ps': (0, 1, 2, b'\xA7', 0),
+    'vfmsubadd231pd': (1, 1, 2, b'\xB7', 0),
+    'vfmsubadd231ps': (0, 1, 2, b'\xB7', 0),
 }
 
 avx_p_table = {b'': 0, b'\x66': 1, b'\xF3': 2, b'\xF2': 3}
@@ -725,10 +767,14 @@ class Parser:
             return
         if name == 'vmovd':
             assert len(args) == 2
-            assert args[0] not in reg32_nums
-            r_dst = xmm_reg_nums[args[0]]
-            r_src = reg32_nums[args[1]]
-            self.code += vex(0, r_dst, 0, r_src, 1, 1, 0, 0) + b'\x6E' + mod_rm_reg(r_dst, r_src)
+            if args[0] in reg32_nums:
+                r_dst = reg32_nums[args[0]]
+                r_src = xmm_reg_nums[args[1]]
+                self.code += vex(0, r_dst, 0, r_src, 1, 1, 0, 0) + b'\x7E' + mod_rm_reg(r_dst, r_src)
+            else:
+                r_dst = xmm_reg_nums[args[0]]
+                r_src = reg32_nums[args[1]]
+                self.code += vex(0, r_dst, 0, r_src, 1, 1, 0, 0) + b'\x6E' + mod_rm_reg(r_dst, r_src)
             return
 
         if name == 'blendvps': # just chop off implicit xmm0 arg
