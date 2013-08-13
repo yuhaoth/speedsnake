@@ -373,21 +373,23 @@ sse_opcodes = {
     'blendvps': (b'\x66', b'\x0F\x38\x14', 0),
 }
 avx_opcodes = {
-    #               w  p  m  opcode   template
-    'vinsertf128': (0, 1, 3, b'\x18', 4),
-    'vmaskmovps':  (0, 1, 2, b'\x2E', 5),
-    'vpsllvd':     (0, 1, 2, b'\x47', 0),
-    'vpsllvq':     (1, 1, 2, b'\x47', 0),
-    'vpsravd':     (0, 1, 2, b'\x46', 0),
-    'vpsrlvd':     (0, 1, 2, b'\x45', 0),
-    'vpsrlvq':     (1, 1, 2, b'\x45', 0),
+    #                w  p  m  opcode   template
+    'vblendvps':    (0, 1, 3, b'\x4A', 5),
+    'vbroadcastss': (0, 1, 2, b'\x18', 1),
+    'vinsertf128':  (0, 1, 3, b'\x18', 4),
+    'vmaskmovps':   (0, 1, 2, b'\x2E', 5),
+    'vpsllvd':      (0, 1, 2, b'\x47', 0),
+    'vpsllvq':      (1, 1, 2, b'\x47', 0),
+    'vpsravd':      (0, 1, 2, b'\x46', 0),
+    'vpsrlvd':      (0, 1, 2, b'\x45', 0),
+    'vpsrlvq':      (1, 1, 2, b'\x45', 0),
 
-    'vfmadd132pd': (1, 1, 2, b'\x98', 0),
-    'vfmadd132ps': (0, 1, 2, b'\x98', 0),
-    'vfmadd213pd': (1, 1, 2, b'\xA8', 0),
-    'vfmadd213ps': (0, 1, 2, b'\xA8', 0),
-    'vfmadd231pd': (1, 1, 2, b'\xB8', 0),
-    'vfmadd231ps': (0, 1, 2, b'\xB8', 0),
+    'vfmadd132pd':  (1, 1, 2, b'\x98', 0),
+    'vfmadd132ps':  (0, 1, 2, b'\x98', 0),
+    'vfmadd213pd':  (1, 1, 2, b'\xA8', 0),
+    'vfmadd213ps':  (0, 1, 2, b'\xA8', 0),
+    'vfmadd231pd':  (1, 1, 2, b'\xB8', 0),
+    'vfmadd231ps':  (0, 1, 2, b'\xB8', 0),
 
     'vfnmadd132pd': (1, 1, 2, b'\x9C', 0),
     'vfnmadd132ps': (0, 1, 2, b'\x9C', 0),
@@ -396,12 +398,12 @@ avx_opcodes = {
     'vfnmadd231pd': (1, 1, 2, b'\xBC', 0),
     'vfnmadd231ps': (0, 1, 2, b'\xBC', 0),
 
-    'vfmsub132pd': (1, 1, 2, b'\x9A', 0),
-    'vfmsub132ps': (0, 1, 2, b'\x9A', 0),
-    'vfmsub213pd': (1, 1, 2, b'\xAA', 0),
-    'vfmsub213ps': (0, 1, 2, b'\xAA', 0),
-    'vfmsub231pd': (1, 1, 2, b'\xBA', 0),
-    'vfmsub231ps': (0, 1, 2, b'\xBA', 0),
+    'vfmsub132pd':  (1, 1, 2, b'\x9A', 0),
+    'vfmsub132ps':  (0, 1, 2, b'\x9A', 0),
+    'vfmsub213pd':  (1, 1, 2, b'\xAA', 0),
+    'vfmsub213ps':  (0, 1, 2, b'\xAA', 0),
+    'vfmsub231pd':  (1, 1, 2, b'\xBA', 0),
+    'vfmsub231ps':  (0, 1, 2, b'\xBA', 0),
 
     'vfnmsub132pd': (1, 1, 2, b'\x9E', 0),
     'vfnmsub132ps': (0, 1, 2, b'\x9E', 0),
@@ -916,6 +918,10 @@ class Parser:
                 r_dst = ymm_reg_nums[args[0]] if l else xmm_reg_nums[args[0]]
                 if isinstance(args[1], Address): # load-op
                     self.code += vex(w, r_dst, args[1].index, args[1].base, p, m, l) + opcode + mod_rm_addr(r_dst, args[1])
+                elif isinstance(args[1], RelLabel):
+                    self.code += vex(w, r_dst, 0, 0, p, m, l) + opcode
+                    disp = args[1].code_offset - (len(self.code) + 5)
+                    self.code += mod_rm_addr(r_dst, Address('rip', 0, 0, disp))
                 else:
                     r_src = ymm_reg_nums[args[1]] if l else xmm_reg_nums[args[1]]
                     self.code += vex(w, r_dst, 0, r_src, p, m, l) + opcode + mod_rm_reg(r_dst, r_src)
@@ -959,6 +965,15 @@ class Parser:
                 r_src0 = ymm_reg_nums[args[1]] if l else xmm_reg_nums[args[1]]
                 r_src1 = ymm_reg_nums[args[2]] if l else xmm_reg_nums[args[2]]
                 self.code += vex(w, r_src1, args[0].index, args[0].base, p, m, l, r_src0) + opcode + mod_rm_addr(r_src1, args[0])
+                return
+            if name == 'vblendvps':
+                assert len(args) == 4
+                l = args[1] in ymm_reg_nums
+                r_dst = ymm_reg_nums[args[0]] if l else xmm_reg_nums[args[0]]
+                r_src0 = ymm_reg_nums[args[1]] if l else xmm_reg_nums[args[1]]
+                r_src1 = ymm_reg_nums[args[2]] if l else xmm_reg_nums[args[2]]
+                r_src2 = ymm_reg_nums[args[3]] if l else xmm_reg_nums[args[3]]
+                self.code += vex(w, r_dst, 0, r_src1, p, m, l, r_src0) + opcode + mod_rm_reg(r_dst, r_src1) + bytes([r_src2 << 4])
                 return
             raise RuntimeError("don't know how to parse line %s" % tokens)
 
