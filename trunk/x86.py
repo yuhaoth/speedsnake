@@ -192,6 +192,11 @@ bmi_opcodes = {
     'bsr':    (b'',     b'\x0F\xBD'),
     'lzcnt':  (b'\xF3', b'\x0F\xBD'),
 }
+bmi_vex_ndd_opcodes = {
+    'blsi':   (0, 2, b'\xF3', 3),
+    'blsmsk': (0, 2, b'\xF3', 2),
+    'blsr':   (0, 2, b'\xF3', 1),
+}
 bmi_vex_opcodes = {
     'andn':   (0, 2, b'\xF2'),
     'bextr':  (0, 2, b'\xF7'),
@@ -390,6 +395,12 @@ avx_opcodes = {
     'vfmadd213ps':  (0, 1, 2, b'\xA8', 0),
     'vfmadd231pd':  (1, 1, 2, b'\xB8', 0),
     'vfmadd231ps':  (0, 1, 2, b'\xB8', 0),
+    'vfmadd132sd':  (1, 1, 2, b'\x99', 0),
+    'vfmadd132ss':  (0, 1, 2, b'\x99', 0),
+    'vfmadd213sd':  (1, 1, 2, b'\xA9', 0),
+    'vfmadd213ss':  (0, 1, 2, b'\xA9', 0),
+    'vfmadd231sd':  (1, 1, 2, b'\xB9', 0),
+    'vfmadd231ss':  (0, 1, 2, b'\xB9', 0),
 
     'vfnmadd132pd': (1, 1, 2, b'\x9C', 0),
     'vfnmadd132ps': (0, 1, 2, b'\x9C', 0),
@@ -397,6 +408,12 @@ avx_opcodes = {
     'vfnmadd213ps': (0, 1, 2, b'\xAC', 0),
     'vfnmadd231pd': (1, 1, 2, b'\xBC', 0),
     'vfnmadd231ps': (0, 1, 2, b'\xBC', 0),
+    'vfnmadd132sd': (1, 1, 2, b'\x9D', 0),
+    'vfnmadd132ss': (0, 1, 2, b'\x9D', 0),
+    'vfnmadd213sd': (1, 1, 2, b'\xAD', 0),
+    'vfnmadd213ss': (0, 1, 2, b'\xAD', 0),
+    'vfnmadd231sd': (1, 1, 2, b'\xBD', 0),
+    'vfnmadd231ss': (0, 1, 2, b'\xBD', 0),
 
     'vfmsub132pd':  (1, 1, 2, b'\x9A', 0),
     'vfmsub132ps':  (0, 1, 2, b'\x9A', 0),
@@ -404,6 +421,12 @@ avx_opcodes = {
     'vfmsub213ps':  (0, 1, 2, b'\xAA', 0),
     'vfmsub231pd':  (1, 1, 2, b'\xBA', 0),
     'vfmsub231ps':  (0, 1, 2, b'\xBA', 0),
+    'vfmsub132sd':  (1, 1, 2, b'\x9B', 0),
+    'vfmsub132ss':  (0, 1, 2, b'\x9B', 0),
+    'vfmsub213sd':  (1, 1, 2, b'\xAB', 0),
+    'vfmsub213ss':  (0, 1, 2, b'\xAB', 0),
+    'vfmsub231sd':  (1, 1, 2, b'\xBB', 0),
+    'vfmsub231ss':  (0, 1, 2, b'\xBB', 0),
 
     'vfnmsub132pd': (1, 1, 2, b'\x9E', 0),
     'vfnmsub132ps': (0, 1, 2, b'\x9E', 0),
@@ -411,6 +434,12 @@ avx_opcodes = {
     'vfnmsub213ps': (0, 1, 2, b'\xAE', 0),
     'vfnmsub231pd': (1, 1, 2, b'\xBE', 0),
     'vfnmsub231ps': (0, 1, 2, b'\xBE', 0),
+    'vfnmsub132sd': (1, 1, 2, b'\x9F', 0),
+    'vfnmsub132ss': (0, 1, 2, b'\x9F', 0),
+    'vfnmsub213sd': (1, 1, 2, b'\xAF', 0),
+    'vfnmsub213ss': (0, 1, 2, b'\xAF', 0),
+    'vfnmsub231sd': (1, 1, 2, b'\xBF', 0),
+    'vfnmsub231ss': (0, 1, 2, b'\xBF', 0),
 
     'vfmaddsub132pd': (1, 1, 2, b'\x96', 0),
     'vfmaddsub132ps': (0, 1, 2, b'\x96', 0),
@@ -882,6 +911,17 @@ class Parser:
             self.code += rex(w, 0, 0, reg) + b'\x0F' + bytes([0xC8 | (reg & 7)])
             return
 
+        if name in bmi_vex_ndd_opcodes:
+            assert len(args) == 2
+            (p, m, opcode, sub_opcode) = bmi_vex_ndd_opcodes[name]
+            w = args[0] in reg64_nums
+            r_dst = reg64_nums[args[0]] if w else reg32_nums[args[0]]
+            if isinstance(args[1], Address): # load-op
+                self.code += vex(w, r_dst, args[1].index, args[1].base, p, m, 0, r_dst) + opcode + mod_rm_addr(sub_opcode, args[1])
+            else:
+                r_src = reg64_nums[args[1]] if w else reg32_nums[args[1]]
+                self.code += vex(w, r_dst, 0, r_src, p, m, 0, r_dst) + opcode + mod_rm_reg(sub_opcode, r_src)
+            return
         if name in bmi_vex_opcodes:
             assert len(args) == 3
             (p, m, opcode) = bmi_vex_opcodes[name]
