@@ -155,6 +155,8 @@ trivial_opcodes = {
     'cwd':        b'\x66\x99',
     'cdq':        b'\x99',
     'cqo':        b'\x48\x99',
+    'wait':       b'\x9B',
+    'fwait':      b'\x9B',
     'sahf':       b'\x9E',
     'lahf':       b'\x9F',
     'movsb':      b'\xA4',
@@ -228,6 +230,25 @@ trivial_opcodes = {
     'vzeroall':   b'\xC5\xFC\x77',
 }
 
+reg_only_opcodes = {
+    # These are not actually reg-only, but supporting them on memory would require parsing "dword ptr", etc.
+    'not':      (b'',     b'\xF7', 2),
+    'neg':      (b'',     b'\xF7', 3),
+    'mul':      (b'',     b'\xF7', 4),
+    'imul':     (b'',     b'\xF7', 5),
+    'div':      (b'',     b'\xF7', 6),
+    'idiv':     (b'',     b'\xF7', 7),
+    'inc':      (b'',     b'\xFF', 0),
+    'dec':      (b'',     b'\xFF', 1),
+
+    # These are actually reg-only.
+    'rdfsbase': (b'\xF3', b'\x0F\xAE', 0),
+    'rdgsbase': (b'\xF3', b'\x0F\xAE', 1),
+    'rdrand':   (b'',     b'\x0F\xC7', 6),
+    'wrfsbase': (b'\xF3', b'\x0F\xAE', 2),
+    'wrgsbase': (b'\xF3', b'\x0F\xAE', 3),
+}
+
 mem_only_opcodes = {
     'clflush':     (0, b'\x0F\xAE', 7),
     'invlpg':      (0, b'\x0F\x01', 7),
@@ -259,7 +280,6 @@ mem_only_opcodes = {
 
 basic_opcodes = {'add': 0, 'or': 1, 'adc': 2, 'sbb': 3, 'and': 4, 'sub': 5, 'xor': 6, 'cmp': 7}
 shift_opcodes = {'rol': 0, 'ror': 1, 'shl': 4, 'shr': 5, 'sar': 7}
-muldiv_opcodes = {'not': 2, 'neg': 3, 'mul': 4, 'imul': 5, 'div': 6, 'idiv': 7}
 cmov_opcodes = {'cmov%s' % cond: bytes([0x0F, 0x40 | opcode]) for (cond, opcode) in conditions.items()}
 jump_opcodes = {'j%s' % cond: bytes([0x70 | opcode]) for (cond, opcode) in conditions.items()}
 jump_opcodes['jmp'] = b'\xEB'
@@ -289,35 +309,12 @@ bmi_vex_opcodes = {
 }
 
 sse_avx_opcodes = {
-    'andps':      (b'',     b'\x0F',     b'\x54', 0),
-    'andnps':     (b'',     b'\x0F',     b'\x55', 0),
-    'orps':       (b'',     b'\x0F',     b'\x56', 0),
-
-    'andpd':      (b'\x66', b'\x0F',     b'\x54', 0),
-    'andnpd':     (b'\x66', b'\x0F',     b'\x55', 0),
-    'orpd':       (b'\x66', b'\x0F',     b'\x56', 0),
-
-    'mulps':      (b'',     b'\x0F',     b'\x59', 0),
-    'mulpd':      (b'\x66', b'\x0F',     b'\x59', 0),
-    'mulss':      (b'\xF3', b'\x0F',     b'\x59', 0), # XXX prohibit YMM register version
-    'mulsd':      (b'\xF2', b'\x0F',     b'\x59', 0), # XXX prohibit YMM register version
-
-    'minps':      (b'',     b'\x0F',     b'\x5D', 0),
-    'minpd':      (b'\x66', b'\x0F',     b'\x5D', 0),
-    'minss':      (b'\xF3', b'\x0F',     b'\x5D', 0), # XXX prohibit YMM register version
-    'minsd':      (b'\xF2', b'\x0F',     b'\x5D', 0), # XXX prohibit YMM register version
-
-    'maxps':      (b'',     b'\x0F',     b'\x5F', 0),
-    'maxpd':      (b'\x66', b'\x0F',     b'\x5F', 0),
-    'maxss':      (b'\xF3', b'\x0F',     b'\x5F', 0), # XXX prohibit YMM register version
-    'maxsd':      (b'\xF2', b'\x0F',     b'\x5F', 0), # XXX prohibit YMM register version
-
-    'cvtdq2pd':   (b'\xF3', b'\x0F',     b'\xE6', 1), # XXX ymm variant has mixed xmm/ymm args
-    'cvtdq2ps':   (b'',     b'\x0F',     b'\x5B', 1),
-    'cvtpd2dq':   (b'\xF2', b'\x0F',     b'\xE6', 1), # XXX ymm variant has mixed xmm/ymm args
-    'cvtpd2ps':   (b'\x66', b'\x0F',     b'\x5A', 1), # XXX ymm variant has mixed xmm/ymm args
-    'cvtps2dq':   (b'\x66', b'\x0F',     b'\x5B', 1),
-    'cvtps2pd':   (b'',     b'\x0F',     b'\x5A', 1), # XXX ymm variant has mixed xmm/ymm args
+    'cvtdq2pd':        (b'\xF3', b'\x0F',     b'\xE6', 1), # XXX ymm variant has mixed xmm/ymm args
+    'cvtdq2ps':        (b'',     b'\x0F',     b'\x5B', 1),
+    'cvtpd2dq':        (b'\xF2', b'\x0F',     b'\xE6', 1), # XXX ymm variant has mixed xmm/ymm args
+    'cvtpd2ps':        (b'\x66', b'\x0F',     b'\x5A', 1), # XXX ymm variant has mixed xmm/ymm args
+    'cvtps2dq':        (b'\x66', b'\x0F',     b'\x5B', 1),
+    'cvtps2pd':        (b'',     b'\x0F',     b'\x5A', 1), # XXX ymm variant has mixed xmm/ymm args
 
     'addpd':           (b'\x66', b'\x0F',     b'\x58', 0),
     'addps':           (b'',     b'\x0F',     b'\x58', 0),
@@ -331,6 +328,12 @@ sse_avx_opcodes = {
     'aesenclast':      (b'\x66', b'\x0F\x38', b'\xDD', 0), # XXX prohibit YMM register version
     'aesimc':          (b'\x66', b'\x0F\x38', b'\xDB', 1), # XXX prohibit YMM register version
     'aeskeygenassist': (b'\x66', b'\x0F\x3A', b'\xDF', 3), # XXX prohibit YMM register version
+    'andpd':           (b'\x66', b'\x0F',     b'\x54', 0),
+    'andps':           (b'',     b'\x0F',     b'\x54', 0),
+    'andnpd':          (b'\x66', b'\x0F',     b'\x55', 0),
+    'andnps':          (b'',     b'\x0F',     b'\x55', 0),
+    'blendpd':         (b'\x66', b'\x0F\x3A', b'\x0D', 2),
+    'blendps':         (b'\x66', b'\x0F\x3A', b'\x0C', 2),
     'cmppd':           (b'\x66', b'\x0F',     b'\xC2', 2),
     'cmpps':           (b'',     b'\x0F',     b'\xC2', 2),
     'cmpsd':           (b'\xF2', b'\x0F',     b'\xC2', 2),
@@ -348,9 +351,23 @@ sse_avx_opcodes = {
     'hsubpd':          (b'\x66', b'\x0F',     b'\x7D', 0),
     'hsubps':          (b'\xF2', b'\x0F',     b'\x7D', 0),
     'insertps':        (b'\x66', b'\x0F\x3A', b'\x21', 2), # XXX prohibit YMM register version
+    'maxpd':           (b'\x66', b'\x0F',     b'\x5F', 0),
+    'maxps':           (b'',     b'\x0F',     b'\x5F', 0),
+    'maxsd':           (b'\xF2', b'\x0F',     b'\x5F', 0), # XXX prohibit YMM register version
+    'maxss':           (b'\xF3', b'\x0F',     b'\x5F', 0), # XXX prohibit YMM register version
+    'minpd':           (b'\x66', b'\x0F',     b'\x5D', 0),
+    'minps':           (b'',     b'\x0F',     b'\x5D', 0),
+    'minsd':           (b'\xF2', b'\x0F',     b'\x5D', 0), # XXX prohibit YMM register version
+    'minss':           (b'\xF3', b'\x0F',     b'\x5D', 0), # XXX prohibit YMM register version
     'movshdup':        (b'\xF3', b'\x0F',     b'\x16', 1),
     'movsldup':        (b'\xF3', b'\x0F',     b'\x12', 1),
     'mpsadbw':         (b'\x66', b'\x0F\x3A', b'\x42', 2),
+    'mulpd':           (b'\x66', b'\x0F',     b'\x59', 0),
+    'mulps':           (b'',     b'\x0F',     b'\x59', 0),
+    'mulsd':           (b'\xF2', b'\x0F',     b'\x59', 0), # XXX prohibit YMM register version
+    'mulss':           (b'\xF3', b'\x0F',     b'\x59', 0), # XXX prohibit YMM register version
+    'orpd':            (b'\x66', b'\x0F',     b'\x56', 0),
+    'orps':            (b'',     b'\x0F',     b'\x56', 0),
     'pabsb':           (b'\x66', b'\x0F\x38', b'\x1C', 1),
     'pabsw':           (b'\x66', b'\x0F\x38', b'\x1D', 1),
     'pabsd':           (b'\x66', b'\x0F\x38', b'\x1E', 1),
@@ -371,20 +388,20 @@ sse_avx_opcodes = {
     'pandn':           (b'\x66', b'\x0F',     b'\xDF', 0),
     'pavgb':           (b'\x66', b'\x0F',     b'\xE0', 0),
     'pavgw':           (b'\x66', b'\x0F',     b'\xE3', 0),
-    # XXX pblendvb
     'pblendw':         (b'\x66', b'\x0F\x3A', b'\x0E', 3),
-    # XXX pblendw
-    # XXX pclmulqdq
+    'pclmulqdq':       (b'\x66', b'\x0F\x3A', b'\x44', 2),
     'pcmpeqb':         (b'\x66', b'\x0F',     b'\x74', 0),
     'pcmpeqw':         (b'\x66', b'\x0F',     b'\x75', 0),
     'pcmpeqd':         (b'\x66', b'\x0F',     b'\x76', 0),
     'pcmpeqq':         (b'\x66', b'\x0F\x38', b'\x29', 0),
-    # XXX pcmpestri/pcmpestrm
+    'pcmpestri':       (b'\x66', b'\x0F\x3A', b'\x61', 3),
+    'pcmpestrm':       (b'\x66', b'\x0F\x3A', b'\x60', 3),
     'pcmpgtb':         (b'\x66', b'\x0F',     b'\x64', 0),
     'pcmpgtw':         (b'\x66', b'\x0F',     b'\x65', 0),
     'pcmpgtd':         (b'\x66', b'\x0F',     b'\x66', 0),
     'pcmpgtq':         (b'\x66', b'\x0F\x38', b'\x37', 0),
-    # XXX pcmpistri/pcmpistrm
+    'pcmpistri':       (b'\x66', b'\x0F\x3A', b'\x63', 3),
+    'pcmpistrm':       (b'\x66', b'\x0F\x3A', b'\x62', 3),
     # XXX pextrb/pextrw/pextrd/pextrq
     'phaddw':          (b'\x66', b'\x0F\x38', b'\x01', 0),
     'phaddd':          (b'\x66', b'\x0F\x38', b'\x02', 0),
@@ -433,11 +450,20 @@ sse_avx_opcodes = {
     'pshufd':          (b'\x66', b'\x0F',     b'\x70', 3),
     'pshufhw':         (b'\xF3', b'\x0F',     b'\x70', 3),
     'pshuflw':         (b'\xF2', b'\x0F',     b'\x70', 3),
-    # XXX pshufw
     'psignb':          (b'\x66', b'\x0F\x38', b'\x08', 1),
     'psignw':          (b'\x66', b'\x0F\x38', b'\x09', 1),
     'psignd':          (b'\x66', b'\x0F\x38', b'\x0A', 1),
-    # XXX psll*, psra*, psrl*
+    # XXX psllw/pslld/psllq/pslldq by immediate
+    'psllw':           (b'\x66', b'\x0F',     b'\xF1', 0), # XXX ymm variant has mixed xmm/ymm args
+    'pslld':           (b'\x66', b'\x0F',     b'\xF2', 0), # XXX ymm variant has mixed xmm/ymm args
+    'psllq':           (b'\x66', b'\x0F',     b'\xF3', 0), # XXX ymm variant has mixed xmm/ymm args
+    # XXX psraw/psrad by immediate
+    'psraw':           (b'\x66', b'\x0F',     b'\xE1', 0), # XXX ymm variant has mixed xmm/ymm args
+    'psrad':           (b'\x66', b'\x0F',     b'\xE2', 0), # XXX ymm variant has mixed xmm/ymm args
+    # XXX psrlw/psrld/psrlq/psrldq by immediate
+    'psrlw':           (b'\x66', b'\x0F',     b'\xD1', 0), # XXX ymm variant has mixed xmm/ymm args
+    'psrld':           (b'\x66', b'\x0F',     b'\xD2', 0), # XXX ymm variant has mixed xmm/ymm args
+    'psrlq':           (b'\x66', b'\x0F',     b'\xD3', 0), # XXX ymm variant has mixed xmm/ymm args
     'psubb':           (b'\x66', b'\x0F',     b'\xF8', 0),
     'psubw':           (b'\x66', b'\x0F',     b'\xF9', 0),
     'psubd':           (b'\x66', b'\x0F',     b'\xFA', 0),
@@ -446,7 +472,7 @@ sse_avx_opcodes = {
     'psubsw':          (b'\x66', b'\x0F',     b'\xE9', 0),
     'psubusb':         (b'\x66', b'\x0F',     b'\xD8', 0),
     'psubusw':         (b'\x66', b'\x0F',     b'\xD9', 0),
-    # XXX ptest
+    'ptest':           (b'\x66', b'\x0F\x38', b'\x17', 1),
     'punpckhbw':       (b'\x66', b'\x0F',     b'\x68', 0),
     'punpckhwd':       (b'\x66', b'\x0F',     b'\x69', 0),
     'punpckhdq':       (b'\x66', b'\x0F',     b'\x6A', 0),
@@ -483,13 +509,6 @@ sse_avx_opcodes = {
     'xorpd':           (b'\x66', b'\x0F',     b'\x57', 0),
     'xorps':           (b'',     b'\x0F',     b'\x57', 0),
 
-    'psllw':           (b'\x66', b'\x0F',     b'\xF1', 0),
-    'pslld':           (b'\x66', b'\x0F',     b'\xF2', 0),
-    'psllq':           (b'\x66', b'\x0F',     b'\xF3', 0),
-    'psrlw':           (b'\x66', b'\x0F',     b'\xD1', 0),
-    'psrld':           (b'\x66', b'\x0F',     b'\xD2', 0),
-    'psrlq':           (b'\x66', b'\x0F',     b'\xD3', 0),
-
     'cvtsd2ss':        (b'\xF2', b'\x0F',     b'\x5A', 1),
     'cvtss2sd':        (b'\xF3', b'\x0F',     b'\x5A', 1),
 
@@ -518,21 +537,27 @@ for suffix in ['ps', 'pd', 'ss', 'sd']:
     sse_compare_aliases.update({'vcmp%s%s' % (name, suffix): ('vcmp%s' % suffix, imm) for (name, imm) in sse_compare_functions.items()})
 
 sse_opcodes = {
+    'blendvpd': (b'\x66', b'\x0F\x38\x15', 0),
     'blendvps': (b'\x66', b'\x0F\x38\x14', 0),
+    'pblendvb': (b'\x66', b'\x0F\x38\x10', 0),
 }
 avx_opcodes = {
     #                w  p  m  opcode   template
+    'vblendvpd':    (0, 1, 3, b'\x4B', 5),
     'vblendvps':    (0, 1, 3, b'\x4A', 5),
     'vbroadcastss': (0, 1, 2, b'\x18', 1),
     'vcvtph2ps':    (0, 1, 2, b'\x13', 1), # XXX ymm variant has mixed xmm/ymm args
     'vcvtps2ph':    (0, 1, 3, b'\x1D', 3), # XXX ymm variant has mixed xmm/ymm args
     'vinsertf128':  (0, 1, 3, b'\x18', 4),
     'vmaskmovps':   (0, 1, 2, b'\x2E', 5),
+    'vpblendvb':    (0, 1, 3, b'\x4C', 5),
     'vpsllvd':      (0, 1, 2, b'\x47', 0),
     'vpsllvq':      (1, 1, 2, b'\x47', 0),
     'vpsravd':      (0, 1, 2, b'\x46', 0),
     'vpsrlvd':      (0, 1, 2, b'\x45', 0),
     'vpsrlvq':      (1, 1, 2, b'\x45', 0),
+    'vtestpd':      (0, 1, 2, b'\x0F', 1),
+    'vtestps':      (0, 1, 2, b'\x0E', 1),
 
     'vfmadd132pd':  (1, 1, 2, b'\x98', 0),
     'vfmadd132ps':  (0, 1, 2, b'\x98', 0),
@@ -869,13 +894,6 @@ class Parser:
                 self.code += rex(w, r_src, 0, r_dst) + b'\x85' + mod_rm_reg(r_src, r_dst)
             return
 
-        if name in {'inc', 'dec'}:
-            assert len(args) == 1
-            w = args[0] in reg64_nums
-            r_dst = reg64_nums[args[0]] if w else reg32_nums[args[0]]
-            self.code += rex(w, 0, 0, r_dst) + b'\xFF' + mod_rm_reg(0 if name == 'inc' else 1, r_dst)
-            return
-
         if name == 'in':
             assert len(args) == 2
             if args[0] == 'al':
@@ -941,6 +959,7 @@ class Parser:
                 self.code += prefix + rex(w, r_dst, 0, r_src) + opcode + mod_rm_reg(r_dst, r_src)
             return
 
+        # XXX shld/shrd
         if name in shift_opcodes:
             assert len(args) == 2
             if args[1] == 1:
@@ -983,7 +1002,7 @@ class Parser:
                 self.code += vex(w, r_xmm, 0, r_gpr, 1, 1, 0, 0) + opcode + mod_rm_reg(r_xmm, r_gpr)
             return
 
-        if name == 'blendvps': # just chop off implicit xmm0 arg
+        if name in {'blendvpd', 'blendvps', 'pblendvb'}: # just chop off implicit xmm0 arg
             assert len(args) == 3 and args[2] == 'xmm0'
             args = args[0:2] # chop off implicit xmm0
         if name in sse_compare_aliases:
@@ -1074,12 +1093,15 @@ class Parser:
                 reg = reg64_nums[args[0]]
                 self.code += rex(0, 0, 0, reg) + bytes([0x58 | (reg & 7)])
             return
-        if name in muldiv_opcodes:
+
+        if name in reg_only_opcodes:
             assert len(args) == 1
+            (prefix, opcode, sub_opcode) = reg_only_opcodes[name]
             w = args[0] in reg64_nums
             reg = reg64_nums[args[0]] if w else reg32_nums[args[0]]
-            self.code += rex(w, 0, 0, reg) + b'\xF7' + mod_rm_reg(muldiv_opcodes[name], reg)
+            self.code += prefix + rex(w, 0, 0, reg) + opcode + mod_rm_reg(sub_opcode, reg)
             return
+
         if name in {'movzx', 'movsx'}:
             assert len(args) == 2
             w = args[0] in reg64_nums
@@ -1213,7 +1235,7 @@ class Parser:
                 r_src1 = ymm_reg_nums[args[2]] if l else xmm_reg_nums[args[2]]
                 self.code += vex(w, r_src1, args[0].index, args[0].base, p, m, l, r_src0) + opcode + mod_rm_addr(r_src1, args[0])
                 return
-            if name == 'vblendvps':
+            if name in {'vblendvpd', 'vblendvps', 'vpblendvb'}:
                 assert len(args) == 4
                 l = args[1] in ymm_reg_nums
                 r_dst = ymm_reg_nums[args[0]] if l else xmm_reg_nums[args[0]]
