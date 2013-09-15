@@ -139,9 +139,11 @@ conditions = {
 }
 
 trivial_opcodes = {
-    'insb': b'\x6C',
-    'insd': b'\x6D',
+    'insb':  b'\x6C',
+    'insw':  b'\x66\x6D',
+    'insd':  b'\x6D',
     'outsb': b'\x6E',
+    'outsw': b'\x66\x6F',
     'outsd': b'\x6F',
     'pause': b'\xF3\x90',
     'nop':   b'\x90',
@@ -152,18 +154,29 @@ trivial_opcodes = {
     'sahf':  b'\x9E',
     'lahf':  b'\x9F',
     'movsb': b'\xA4',
+    'movsw': b'\x66\xA5',
     'movsd': b'\xA5',
+    'movsq': b'\x48\xA5',
     'cmpsb': b'\xA6',
+    'cmpsw': b'\x66\xA7',
     'cmpsd': b'\xA7',
+    'cmpsq': b'\x48\xA7',
     'stosb': b'\xAA',
+    'stosw': b'\x66\xAB',
     'stosd': b'\xAB',
+    'stosq': b'\x48\xAB',
     'lodsb': b'\xAC',
+    'lodsw': b'\x66\xAD',
     'lodsd': b'\xAD',
+    'lodsq': b'\x48\xAD',
     'scasb': b'\xAE',
+    'scasw': b'\x66\xAF',
     'scasd': b'\xAF',
+    'scasq': b'\x48\xAF',
     'ret':   b'\xC3',
     'retf':  b'\xCB',
     'xlat':  b'\xD7',
+    'xlatb': b'\xD7',
     'hlt':   b'\xF4',
     'cmc':   b'\xF5',
     'clc':   b'\xF8',
@@ -172,6 +185,24 @@ trivial_opcodes = {
     'sti':   b'\xFB',
     'cld':   b'\xFC',
     'std':   b'\xFD',
+
+    'xgetbv': b'\x0F\x01\xD0',
+    'xsetbv': b'\x0F\x01\xD1',
+    'rdtscp': b'\x0F\x01\xF9',
+    'syscall': b'\x0F\x05',
+    'sysret': b'\x0F\x07',
+    'wbinvd': b'\x0F\x09',
+    'ud2': b'\x0F\x0B',
+    'wrmsr': b'\x0F\x30',
+    'rdtsc': b'\x0F\x31',
+    'rdmsr': b'\x0F\x32',
+    'rdpmc': b'\x0F\x33',
+    'sysenter': b'\x0F\x34',
+    'sysexit': b'\x0F\x35',
+    'rsm': b'\x0F\xAA',
+    'lfence': b'\x0F\xAE\xE8',
+    'mfence': b'\x0F\xAE\xF0',
+    'sfence': b'\x0F\xAE\xF8',
 
     'vzeroupper': b'\xC5\xF8\x77',
     'vzeroall': b'\xC5\xFC\x77',
@@ -212,42 +243,35 @@ sse_avx_opcodes = {
     'andps':      (b'',     b'\x0F',     b'\x54', 0),
     'andnps':     (b'',     b'\x0F',     b'\x55', 0),
     'orps':       (b'',     b'\x0F',     b'\x56', 0),
-    'xorps':      (b'',     b'\x0F',     b'\x57', 0),
 
     'andpd':      (b'\x66', b'\x0F',     b'\x54', 0),
     'andnpd':     (b'\x66', b'\x0F',     b'\x55', 0),
     'orpd':       (b'\x66', b'\x0F',     b'\x56', 0),
-    'xorpd':      (b'\x66', b'\x0F',     b'\x57', 0),
 
     'addps':      (b'',     b'\x0F',     b'\x58', 0),
     'addpd':      (b'\x66', b'\x0F',     b'\x58', 0),
-    'addss':      (b'\xF3', b'\x0F',     b'\x58', 0),
-    'addsd':      (b'\xF2', b'\x0F',     b'\x58', 0),
-
-    'subps':      (b'',     b'\x0F',     b'\x5C', 0),
-    'subpd':      (b'\x66', b'\x0F',     b'\x5C', 0),
-    'subss':      (b'\xF3', b'\x0F',     b'\x5C', 0),
-    'subsd':      (b'\xF2', b'\x0F',     b'\x5C', 0),
+    'addss':      (b'\xF3', b'\x0F',     b'\x58', 0), # XXX prohibit YMM register version
+    'addsd':      (b'\xF2', b'\x0F',     b'\x58', 0), # XXX prohibit YMM register version
 
     'mulps':      (b'',     b'\x0F',     b'\x59', 0),
     'mulpd':      (b'\x66', b'\x0F',     b'\x59', 0),
-    'mulss':      (b'\xF3', b'\x0F',     b'\x59', 0),
-    'mulsd':      (b'\xF2', b'\x0F',     b'\x59', 0),
+    'mulss':      (b'\xF3', b'\x0F',     b'\x59', 0), # XXX prohibit YMM register version
+    'mulsd':      (b'\xF2', b'\x0F',     b'\x59', 0), # XXX prohibit YMM register version
 
     'divps':      (b'',     b'\x0F',     b'\x5E', 0),
     'divpd':      (b'\x66', b'\x0F',     b'\x5E', 0),
-    'divss':      (b'\xF3', b'\x0F',     b'\x5E', 0),
-    'divsd':      (b'\xF2', b'\x0F',     b'\x5E', 0),
+    'divss':      (b'\xF3', b'\x0F',     b'\x5E', 0), # XXX prohibit YMM register version
+    'divsd':      (b'\xF2', b'\x0F',     b'\x5E', 0), # XXX prohibit YMM register version
 
     'minps':      (b'',     b'\x0F',     b'\x5D', 0),
     'minpd':      (b'\x66', b'\x0F',     b'\x5D', 0),
-    'minss':      (b'\xF3', b'\x0F',     b'\x5D', 0),
-    'minsd':      (b'\xF2', b'\x0F',     b'\x5D', 0),
+    'minss':      (b'\xF3', b'\x0F',     b'\x5D', 0), # XXX prohibit YMM register version
+    'minsd':      (b'\xF2', b'\x0F',     b'\x5D', 0), # XXX prohibit YMM register version
 
     'maxps':      (b'',     b'\x0F',     b'\x5F', 0),
     'maxpd':      (b'\x66', b'\x0F',     b'\x5F', 0),
-    'maxss':      (b'\xF3', b'\x0F',     b'\x5F', 0),
-    'maxsd':      (b'\xF2', b'\x0F',     b'\x5F', 0),
+    'maxss':      (b'\xF3', b'\x0F',     b'\x5F', 0), # XXX prohibit YMM register version
+    'maxsd':      (b'\xF2', b'\x0F',     b'\x5F', 0), # XXX prohibit YMM register version
 
     'cvtdq2pd':   (b'\xF3', b'\x0F',     b'\xE6', 1), # XXX ymm variant has mixed xmm/ymm args
     'cvtdq2ps':   (b'',     b'\x0F',     b'\x5B', 1),
@@ -259,6 +283,9 @@ sse_avx_opcodes = {
     'addsubps':   (b'\xF2', b'\x0F',     b'\xD0', 0),
     'addsubpd':   (b'\x66', b'\x0F',     b'\xD0', 0),
 
+    'movshdup':   (b'\xF3', b'\x0F',     b'\x16', 1),
+    'movsldup':   (b'\xF3', b'\x0F',     b'\x12', 1),
+    'mpsadbw':    (b'\x66', b'\x0F\x3A', b'\x42', 2),
     'pabsb':      (b'\x66', b'\x0F\x38', b'\x1C', 1),
     'pabsw':      (b'\x66', b'\x0F\x38', b'\x1D', 1),
     'pabsd':      (b'\x66', b'\x0F\x38', b'\x1E', 1),
@@ -280,6 +307,7 @@ sse_avx_opcodes = {
     'pavgb':      (b'\x66', b'\x0F',     b'\xE0', 0),
     'pavgw':      (b'\x66', b'\x0F',     b'\xE3', 0),
     # XXX pblendvb
+    'pblendw':    (b'\x66', b'\x0F\x3A', b'\x0E', 3),
     # XXX pblendw
     # XXX pclmulqdq
     'pcmpeqb':    (b'\x66', b'\x0F',     b'\x74', 0),
@@ -365,14 +393,30 @@ sse_avx_opcodes = {
     'pxor':       (b'\x66', b'\x0F',     b'\xEF', 0),
     'rcpps':      (b'',     b'\x0F',     b'\x53', 1),
     'rcpss':      (b'\xF3', b'\x0F',     b'\x53', 1), # XXX prohibit YMM register version
+    'roundpd':    (b'\x66', b'\x0F\x3A', b'\x09', 3),
+    'roundps':    (b'\x66', b'\x0F\x3A', b'\x08', 3),
+    'roundsd':    (b'\x66', b'\x0F\x3A', b'\x0B', 3), # XXX prohibit YMM register version
+    'roundss':    (b'\x66', b'\x0F\x3A', b'\x0A', 3), # XXX prohibit YMM register version
     'rsqrtps':    (b'',     b'\x0F',     b'\x52', 1),
     'rsqrtss':    (b'\xF3', b'\x0F',     b'\x52', 1), # XXX prohibit YMM register version
     'shufpd':     (b'\x66', b'\x0F',     b'\xC6', 3),
     'shufps':     (b'',     b'\x0F',     b'\xC6', 3),
     'sqrtpd':     (b'\x66', b'\x0F',     b'\x51', 1),
     'sqrtps':     (b'',     b'\x0F',     b'\x51', 1),
-    'sqrtsd':     (b'\xF2', b'\x0F',     b'\x51', 1),
-    'sqrtss':     (b'\xF3', b'\x0F',     b'\x51', 1),
+    'sqrtsd':     (b'\xF2', b'\x0F',     b'\x51', 1), # XXX prohibit YMM register version
+    'sqrtss':     (b'\xF3', b'\x0F',     b'\x51', 1), # XXX prohibit YMM register version
+    'subps':      (b'',     b'\x0F',     b'\x5C', 0),
+    'subpd':      (b'\x66', b'\x0F',     b'\x5C', 0),
+    'subss':      (b'\xF3', b'\x0F',     b'\x5C', 0), # XXX prohibit YMM register version
+    'subsd':      (b'\xF2', b'\x0F',     b'\x5C', 0), # XXX prohibit YMM register version
+    'ucomisd':    (b'\x66', b'\x0F',     b'\x2E', 0), # XXX prohibit YMM register version
+    'ucomiss':    (b'',     b'\x0F',     b'\x2E', 0), # XXX prohibit YMM register version
+    'unpckhpd':   (b'\x66', b'\x0F',     b'\x15', 0),
+    'unpckhps':   (b'',     b'\x0F',     b'\x15', 0),
+    'unpcklpd':   (b'\x66', b'\x0F',     b'\x14', 0),
+    'unpcklps':   (b'',     b'\x0F',     b'\x14', 0),
+    'xorpd':      (b'\x66', b'\x0F',     b'\x57', 0),
+    'xorps':      (b'',     b'\x0F',     b'\x57', 0),
 
     'psllw':      (b'\x66', b'\x0F',     b'\xF1', 0),
     'pslld':      (b'\x66', b'\x0F',     b'\xF2', 0),
@@ -387,9 +431,17 @@ sse_avx_opcodes = {
     'cmpps':      (b'',     b'\x0F',     b'\xC2', 2),
     'cmppd':      (b'\x66', b'\x0F',     b'\xC2', 2),
 
+    'movapd':     (b'\x66', b'\x0F',     b'\x28', 1),
     'movaps':     (b'',     b'\x0F',     b'\x28', 1),
+    'storeapd':   (b'\x66', b'\x0F',     b'\x29', 1),
     'storeaps':   (b'',     b'\x0F',     b'\x29', 1),
+    'movsd':      (b'\xF2', b'\x0F',     b'\x10', 0),
+    'movss':      (b'\xF3', b'\x0F',     b'\x10', 0),
+    'storesd':    (b'\xF2', b'\x0F',     b'\x11', 0),
+    'storess':    (b'\xF3', b'\x0F',     b'\x11', 0),
+    'movupd':     (b'\x66', b'\x0F',     b'\x10', 1),
     'movups':     (b'',     b'\x0F',     b'\x10', 1),
+    'storeupd':   (b'\x66', b'\x0F',     b'\x11', 1),
     'storeups':   (b'',     b'\x0F',     b'\x11', 1),
     'movdqa':     (b'\x66', b'\x0F',     b'\x6F', 1),
     'storedqa':   (b'\x66', b'\x0F',     b'\x7F', 1),
@@ -492,7 +544,7 @@ avx_opcodes = {
 }
 
 avx_p_table = {b'': 0, b'\x66': 1, b'\xF3': 2, b'\xF2': 3}
-avx_m_table = {b'\x0F': 1, b'\x0F\x38': 2}
+avx_m_table = {b'\x0F': 1, b'\x0F\x38': 2, b'\x0F\x3A': 3}
 for (name, (prefix, opcode_prefix, opcode, template)) in sse_avx_opcodes.items():
     sse_opcodes[name] = (prefix, opcode_prefix + opcode, template)
     avx_opcodes['v' + name] = (0, avx_p_table[prefix], avx_m_table[opcode_prefix], opcode, template)
@@ -671,14 +723,15 @@ class Parser:
             args = tokens[1::2]
 
         # convert stores to a different opcode name so we can look them up more easily
-        if name in {'movaps', 'vmovaps', 'movups', 'vmovups', 'movdqa', 'vmovdqa',
-                    'movdqu', 'vmovdqu', 'mov'} and isinstance(args[0], Address):
+        if name in {'movapd', 'movaps', 'vmovapd', 'vmovaps',
+                    'movsd', 'movss', 'vmovss', 'vmovsd',
+                    'movupd', 'movups', 'vmovupd', 'vmovups',
+                    'movdqa', 'vmovdqa', 'movdqu', 'vmovdqu', 'mov'} and args and isinstance(args[0], Address):
             assert len(args) == 2
             name = name.replace('mov', 'store')
             args = [args[1], args[0]]
 
-        if name in trivial_opcodes:
-            assert not args
+        if name in trivial_opcodes and not args:
             self.code += trivial_opcodes[name]
             return
 
@@ -758,6 +811,39 @@ class Parser:
             w = args[0] in reg64_nums
             r_dst = reg64_nums[args[0]] if w else reg32_nums[args[0]]
             self.code += rex(w, 0, 0, r_dst) + b'\xFF' + mod_rm_reg(0 if name == 'inc' else 1, r_dst)
+            return
+
+        if name == 'in':
+            assert len(args) == 2
+            if args[0] == 'al':
+                if args[1] == 'dx':
+                    self.code += b'\xEC'
+                else:
+                    self.code += b'\xE4' + bytes([args[1]])
+            else:
+                assert args[0] in {'ax', 'eax'}
+                if args[0] == 'ax':
+                    self.code += b'\x66'
+                if args[1] == 'dx':
+                    self.code += b'\xED'
+                else:
+                    self.code += b'\xE5' + bytes([args[1]])
+            return
+        if name == 'out':
+            assert len(args) == 2
+            if args[1] == 'al':
+                if args[0] == 'dx':
+                    self.code += b'\xEE'
+                else:
+                    self.code += b'\xE6' + bytes([args[0]])
+            else:
+                assert args[1] in {'ax', 'eax'}
+                if args[1] == 'ax':
+                    self.code += b'\x66'
+                if args[0] == 'dx':
+                    self.code += b'\xEF'
+                else:
+                    self.code += b'\xE7' + bytes([args[0]])
             return
 
         if name in cmov_opcodes:
