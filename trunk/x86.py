@@ -174,7 +174,11 @@ trivial_opcodes = {
     'scasd': b'\xAF',
     'scasq': b'\x48\xAF',
     'ret':   b'\xC3',
+    'leave': b'\xC9',
     'retf':  b'\xCB',
+    'iret':  b'\xCF',
+    'iretd': b'\xCF',
+    'iretq': b'\x48\xCF',
     'xlat':  b'\xD7',
     'xlatb': b'\xD7',
     'hlt':   b'\xF4',
@@ -186,26 +190,58 @@ trivial_opcodes = {
     'cld':   b'\xFC',
     'std':   b'\xFD',
 
-    'xgetbv': b'\x0F\x01\xD0',
-    'xsetbv': b'\x0F\x01\xD1',
-    'rdtscp': b'\x0F\x01\xF9',
-    'syscall': b'\x0F\x05',
-    'sysret': b'\x0F\x07',
-    'wbinvd': b'\x0F\x09',
-    'ud2': b'\x0F\x0B',
-    'wrmsr': b'\x0F\x30',
-    'rdtsc': b'\x0F\x31',
-    'rdmsr': b'\x0F\x32',
-    'rdpmc': b'\x0F\x33',
+    'monitor':  b'\x0F\x01\xC8',
+    'mwait':    b'\x0F\x01\xC9',
+    'xgetbv':   b'\x0F\x01\xD0',
+    'xsetbv':   b'\x0F\x01\xD1',
+    'swapgs':   b'\x0F\x01\xF8',
+    'rdtscp':   b'\x0F\x01\xF9',
+    'syscall':  b'\x0F\x05',
+    'sysret':   b'\x0F\x07',
+    'invd':     b'\x0F\x08',
+    'wbinvd':   b'\x0F\x09',
+    'ud2':      b'\x0F\x0B',
+    'wrmsr':    b'\x0F\x30',
+    'rdtsc':    b'\x0F\x31',
+    'rdmsr':    b'\x0F\x32',
+    'rdpmc':    b'\x0F\x33',
     'sysenter': b'\x0F\x34',
-    'sysexit': b'\x0F\x35',
-    'rsm': b'\x0F\xAA',
-    'lfence': b'\x0F\xAE\xE8',
-    'mfence': b'\x0F\xAE\xF0',
-    'sfence': b'\x0F\xAE\xF8',
+    'sysexit':  b'\x0F\x35',
+    'rsm':      b'\x0F\xAA',
+    'lfence':   b'\x0F\xAE\xE8',
+    'mfence':   b'\x0F\xAE\xF0',
+    'sfence':   b'\x0F\xAE\xF8',
 
     'vzeroupper': b'\xC5\xF8\x77',
     'vzeroall': b'\xC5\xFC\x77',
+}
+
+mem_only_opcodes = {
+    'invlpg':      (0, b'\x0F\x01', 7),
+    'ldmxcsr':     (0, b'\x0F\xAE', 2),
+    'lgdt':        (0, b'\x0F\x01', 2),
+    'lidt':        (0, b'\x0F\x01', 3),
+    'lldt':        (0, b'\x0F\x00', 2),
+    'lmsw':        (0, b'\x0F\x01', 6),
+    'ltr':         (0, b'\x0F\x00', 3),
+    'prefetcht0':  (0, b'\x0F\x18', 1),
+    'prefetcht1':  (0, b'\x0F\x18', 2),
+    'prefetcht2':  (0, b'\x0F\x18', 3),
+    'prefetchnta': (0, b'\x0F\x18', 0),
+    'sgdt':        (0, b'\x0F\x01', 0),
+    'sidt':        (0, b'\x0F\x01', 1),
+    'sldt':        (0, b'\x0F\x00', 0),
+    'smsw':        (0, b'\x0F\x01', 4),
+    'stmxcsr':     (0, b'\x0F\xAE', 3),
+    'str':         (0, b'\x0F\x00', 1),
+    'verr':        (0, b'\x0F\x00', 4),
+    'verw':        (0, b'\x0F\x00', 5),
+    'xrstor':      (0, b'\x0F\xAE', 5),
+    'xrstor64':    (1, b'\x0F\xAE', 5),
+    'xsave':       (0, b'\x0F\xAE', 4),
+    'xsave64':     (1, b'\x0F\xAE', 4),
+    'xsaveopt':    (0, b'\x0F\xAE', 6),
+    'xsaveopt64':  (1, b'\x0F\xAE', 6),
 }
 
 basic_opcodes = {'add': 0, 'or': 1, 'adc': 2, 'sbb': 3, 'and': 4, 'sub': 5, 'xor': 6, 'cmp': 7}
@@ -280,178 +316,180 @@ sse_avx_opcodes = {
     'cvtps2dq':   (b'\x66', b'\x0F',     b'\x5B', 1),
     'cvtps2pd':   (b'',     b'\x0F',     b'\x5A', 1), # XXX ymm variant has mixed xmm/ymm args
 
-    'addsubps':   (b'\xF2', b'\x0F',     b'\xD0', 0),
-    'addsubpd':   (b'\x66', b'\x0F',     b'\xD0', 0),
-
-    'movshdup':   (b'\xF3', b'\x0F',     b'\x16', 1),
-    'movsldup':   (b'\xF3', b'\x0F',     b'\x12', 1),
-    'mpsadbw':    (b'\x66', b'\x0F\x3A', b'\x42', 2),
-    'pabsb':      (b'\x66', b'\x0F\x38', b'\x1C', 1),
-    'pabsw':      (b'\x66', b'\x0F\x38', b'\x1D', 1),
-    'pabsd':      (b'\x66', b'\x0F\x38', b'\x1E', 1),
-    'packsswb':   (b'\x66', b'\x0F',     b'\x63', 0),
-    'packssdw':   (b'\x66', b'\x0F',     b'\x6B', 0),
-    'packuswb':   (b'\x66', b'\x0F',     b'\x67', 0),
-    'packusdw':   (b'\x66', b'\x0F\x38', b'\x2B', 0),
-    'paddb':      (b'\x66', b'\x0F',     b'\xFC', 0),
-    'paddw':      (b'\x66', b'\x0F',     b'\xFD', 0),
-    'paddd':      (b'\x66', b'\x0F',     b'\xFE', 0),
-    'paddq':      (b'\x66', b'\x0F',     b'\xD4', 0),
-    'paddsb':     (b'\x66', b'\x0F',     b'\xEC', 0),
-    'paddsw':     (b'\x66', b'\x0F',     b'\xED', 0),
-    'paddusb':    (b'\x66', b'\x0F',     b'\xDC', 0),
-    'paddusw':    (b'\x66', b'\x0F',     b'\xDD', 0),
-    # XXX palignr
-    'pand':       (b'\x66', b'\x0F',     b'\xDB', 0),
-    'pandn':      (b'\x66', b'\x0F',     b'\xDF', 0),
-    'pavgb':      (b'\x66', b'\x0F',     b'\xE0', 0),
-    'pavgw':      (b'\x66', b'\x0F',     b'\xE3', 0),
+    'addsubps':        (b'\xF2', b'\x0F',     b'\xD0', 0),
+    'addsubpd':        (b'\x66', b'\x0F',     b'\xD0', 0),
+    'aesdec':          (b'\x66', b'\x0F\x38', b'\xDE', 0), # XXX prohibit YMM register version
+    'aesdeclast':      (b'\x66', b'\x0F\x38', b'\xDF', 0), # XXX prohibit YMM register version
+    'aesenc':          (b'\x66', b'\x0F\x38', b'\xDC', 0), # XXX prohibit YMM register version
+    'aesenclast':      (b'\x66', b'\x0F\x38', b'\xDD', 0), # XXX prohibit YMM register version
+    'aesimc':          (b'\x66', b'\x0F\x38', b'\xDB', 1), # XXX prohibit YMM register version
+    'aeskeygenassist': (b'\x66', b'\x0F\x3A', b'\xDF', 3), # XXX prohibit YMM register version
+    'hsubpd':          (b'\x66', b'\x0F',     b'\x7D', 0),
+    'hsubps':          (b'\xF2', b'\x0F',     b'\x7D', 0),
+    'movshdup':        (b'\xF3', b'\x0F',     b'\x16', 1),
+    'movsldup':        (b'\xF3', b'\x0F',     b'\x12', 1),
+    'mpsadbw':         (b'\x66', b'\x0F\x3A', b'\x42', 2),
+    'pabsb':           (b'\x66', b'\x0F\x38', b'\x1C', 1),
+    'pabsw':           (b'\x66', b'\x0F\x38', b'\x1D', 1),
+    'pabsd':           (b'\x66', b'\x0F\x38', b'\x1E', 1),
+    'packsswb':        (b'\x66', b'\x0F',     b'\x63', 0),
+    'packssdw':        (b'\x66', b'\x0F',     b'\x6B', 0),
+    'packuswb':        (b'\x66', b'\x0F',     b'\x67', 0),
+    'packusdw':        (b'\x66', b'\x0F\x38', b'\x2B', 0),
+    'paddb':           (b'\x66', b'\x0F',     b'\xFC', 0),
+    'paddw':           (b'\x66', b'\x0F',     b'\xFD', 0),
+    'paddd':           (b'\x66', b'\x0F',     b'\xFE', 0),
+    'paddq':           (b'\x66', b'\x0F',     b'\xD4', 0),
+    'paddsb':          (b'\x66', b'\x0F',     b'\xEC', 0),
+    'paddsw':          (b'\x66', b'\x0F',     b'\xED', 0),
+    'paddusb':         (b'\x66', b'\x0F',     b'\xDC', 0),
+    'paddusw':         (b'\x66', b'\x0F',     b'\xDD', 0),
+    'palignr':         (b'\x66', b'\x0F\x3A', b'\x0F', 3),
+    'pand':            (b'\x66', b'\x0F',     b'\xDB', 0),
+    'pandn':           (b'\x66', b'\x0F',     b'\xDF', 0),
+    'pavgb':           (b'\x66', b'\x0F',     b'\xE0', 0),
+    'pavgw':           (b'\x66', b'\x0F',     b'\xE3', 0),
     # XXX pblendvb
-    'pblendw':    (b'\x66', b'\x0F\x3A', b'\x0E', 3),
+    'pblendw':         (b'\x66', b'\x0F\x3A', b'\x0E', 3),
     # XXX pblendw
     # XXX pclmulqdq
-    'pcmpeqb':    (b'\x66', b'\x0F',     b'\x74', 0),
-    'pcmpeqw':    (b'\x66', b'\x0F',     b'\x75', 0),
-    'pcmpeqd':    (b'\x66', b'\x0F',     b'\x76', 0),
-    'pcmpeqq':    (b'\x66', b'\x0F\x38', b'\x29', 0),
+    'pcmpeqb':         (b'\x66', b'\x0F',     b'\x74', 0),
+    'pcmpeqw':         (b'\x66', b'\x0F',     b'\x75', 0),
+    'pcmpeqd':         (b'\x66', b'\x0F',     b'\x76', 0),
+    'pcmpeqq':         (b'\x66', b'\x0F\x38', b'\x29', 0),
     # XXX pcmpestri/pcmpestrm
-    'pcmpgtb':    (b'\x66', b'\x0F',     b'\x64', 0),
-    'pcmpgtw':    (b'\x66', b'\x0F',     b'\x65', 0),
-    'pcmpgtd':    (b'\x66', b'\x0F',     b'\x66', 0),
-    'pcmpgtq':    (b'\x66', b'\x0F\x38', b'\x37', 0),
+    'pcmpgtb':         (b'\x66', b'\x0F',     b'\x64', 0),
+    'pcmpgtw':         (b'\x66', b'\x0F',     b'\x65', 0),
+    'pcmpgtd':         (b'\x66', b'\x0F',     b'\x66', 0),
+    'pcmpgtq':         (b'\x66', b'\x0F\x38', b'\x37', 0),
     # XXX pcmpistri/pcmpistrm
     # XXX pextrb/pextrw/pextrd/pextrq
-    'phaddw':     (b'\x66', b'\x0F\x38', b'\x01', 0),
-    'phaddd':     (b'\x66', b'\x0F\x38', b'\x02', 0),
-    'phaddsw':    (b'\x66', b'\x0F\x38', b'\x03', 0),
-    'phminposuw': (b'\x66', b'\x0F\x38', b'\x41', 1), # XXX prohibit YMM register version
-    'phsubw':     (b'\x66', b'\x0F\x38', b'\x05', 0),
-    'phsubd':     (b'\x66', b'\x0F\x38', b'\x06', 0),
-    'phsubsw':    (b'\x66', b'\x0F\x38', b'\x07', 0),
+    'phaddw':          (b'\x66', b'\x0F\x38', b'\x01', 0),
+    'phaddd':          (b'\x66', b'\x0F\x38', b'\x02', 0),
+    'phaddsw':         (b'\x66', b'\x0F\x38', b'\x03', 0),
+    'phminposuw':      (b'\x66', b'\x0F\x38', b'\x41', 1), # XXX prohibit YMM register version
+    'phsubw':          (b'\x66', b'\x0F\x38', b'\x05', 0),
+    'phsubd':          (b'\x66', b'\x0F\x38', b'\x06', 0),
+    'phsubsw':         (b'\x66', b'\x0F\x38', b'\x07', 0),
     # XXX pinsrb/pinsrw/pinsrd/pinsrq
-    'pmaddubsw':  (b'\x66', b'\x0F\x38', b'\x04', 0),
-    'pmaddwd':    (b'\x66', b'\x0F',     b'\xF5', 0),
-    'pmaxsb':     (b'\x66', b'\x0F\x38', b'\x3C', 0),
-    'pmaxsw':     (b'\x66', b'\x0F',     b'\xEE', 0),
-    'pmaxsd':     (b'\x66', b'\x0F\x38', b'\x3D', 0),
-    'pmaxub':     (b'\x66', b'\x0F',     b'\xDE', 0),
-    'pmaxuw':     (b'\x66', b'\x0F\x38', b'\x3E', 0),
-    'pmaxud':     (b'\x66', b'\x0F\x38', b'\x3F', 0),
-    'pminsb':     (b'\x66', b'\x0F\x38', b'\x38', 0),
-    'pminsw':     (b'\x66', b'\x0F',     b'\xEA', 0),
-    'pminsd':     (b'\x66', b'\x0F\x38', b'\x39', 0),
-    'pminub':     (b'\x66', b'\x0F',     b'\xDA', 0),
-    'pminuw':     (b'\x66', b'\x0F\x38', b'\x3A', 0),
-    'pminud':     (b'\x66', b'\x0F\x38', b'\x3B', 0),
-    'pmovsxbw':   (b'\x66', b'\x0F\x38', b'\x20', 1), # XXX ymm variant has mixed xmm/ymm args
-    'pmovsxbd':   (b'\x66', b'\x0F\x38', b'\x21', 1), # XXX ymm variant has mixed xmm/ymm args
-    'pmovsxbq':   (b'\x66', b'\x0F\x38', b'\x22', 1), # XXX ymm variant has mixed xmm/ymm args
-    'pmovsxwd':   (b'\x66', b'\x0F\x38', b'\x23', 1), # XXX ymm variant has mixed xmm/ymm args
-    'pmovsxwq':   (b'\x66', b'\x0F\x38', b'\x24', 1), # XXX ymm variant has mixed xmm/ymm args
-    'pmovsxdq':   (b'\x66', b'\x0F\x38', b'\x25', 1), # XXX ymm variant has mixed xmm/ymm args
-    'pmovzxbw':   (b'\x66', b'\x0F\x38', b'\x30', 1), # XXX ymm variant has mixed xmm/ymm args
-    'pmovzxbd':   (b'\x66', b'\x0F\x38', b'\x31', 1), # XXX ymm variant has mixed xmm/ymm args
-    'pmovzxbq':   (b'\x66', b'\x0F\x38', b'\x32', 1), # XXX ymm variant has mixed xmm/ymm args
-    'pmovzxwd':   (b'\x66', b'\x0F\x38', b'\x33', 1), # XXX ymm variant has mixed xmm/ymm args
-    'pmovzxwq':   (b'\x66', b'\x0F\x38', b'\x34', 1), # XXX ymm variant has mixed xmm/ymm args
-    'pmovzxdq':   (b'\x66', b'\x0F\x38', b'\x35', 1), # XXX ymm variant has mixed xmm/ymm args
-    'pmuldq':     (b'\x66', b'\x0F\x38', b'\x28', 0),
-    'pmulhrsw':   (b'\x66', b'\x0F\x38', b'\x0B', 0),
-    'pmulhuw':    (b'\x66', b'\x0F',     b'\xE4', 0),
-    'pmulhw':     (b'\x66', b'\x0F',     b'\xE5', 0),
-    'pmulld':     (b'\x66', b'\x0F\x38', b'\x40', 0),
-    'pmullw':     (b'\x66', b'\x0F',     b'\xD5', 0),
-    'pmuludq':    (b'\x66', b'\x0F',     b'\xF4', 0),
-    'por':        (b'\x66', b'\x0F',     b'\xEB', 0),
-    'psadbw':     (b'\x66', b'\x0F',     b'\xF6', 0),
-    'pshufb':     (b'\x66', b'\x0F\x38', b'\x00', 0),
-    'pshufd':     (b'\x66', b'\x0F',     b'\x70', 3),
-    'pshufhw':    (b'\xF3', b'\x0F',     b'\x70', 3),
-    'pshuflw':    (b'\xF2', b'\x0F',     b'\x70', 3),
+    'pmaddubsw':       (b'\x66', b'\x0F\x38', b'\x04', 0),
+    'pmaddwd':         (b'\x66', b'\x0F',     b'\xF5', 0),
+    'pmaxsb':          (b'\x66', b'\x0F\x38', b'\x3C', 0),
+    'pmaxsw':          (b'\x66', b'\x0F',     b'\xEE', 0),
+    'pmaxsd':          (b'\x66', b'\x0F\x38', b'\x3D', 0),
+    'pmaxub':          (b'\x66', b'\x0F',     b'\xDE', 0),
+    'pmaxuw':          (b'\x66', b'\x0F\x38', b'\x3E', 0),
+    'pmaxud':          (b'\x66', b'\x0F\x38', b'\x3F', 0),
+    'pminsb':          (b'\x66', b'\x0F\x38', b'\x38', 0),
+    'pminsw':          (b'\x66', b'\x0F',     b'\xEA', 0),
+    'pminsd':          (b'\x66', b'\x0F\x38', b'\x39', 0),
+    'pminub':          (b'\x66', b'\x0F',     b'\xDA', 0),
+    'pminuw':          (b'\x66', b'\x0F\x38', b'\x3A', 0),
+    'pminud':          (b'\x66', b'\x0F\x38', b'\x3B', 0),
+    'pmovsxbw':        (b'\x66', b'\x0F\x38', b'\x20', 1), # XXX ymm variant has mixed xmm/ymm args
+    'pmovsxbd':        (b'\x66', b'\x0F\x38', b'\x21', 1), # XXX ymm variant has mixed xmm/ymm args
+    'pmovsxbq':        (b'\x66', b'\x0F\x38', b'\x22', 1), # XXX ymm variant has mixed xmm/ymm args
+    'pmovsxwd':        (b'\x66', b'\x0F\x38', b'\x23', 1), # XXX ymm variant has mixed xmm/ymm args
+    'pmovsxwq':        (b'\x66', b'\x0F\x38', b'\x24', 1), # XXX ymm variant has mixed xmm/ymm args
+    'pmovsxdq':        (b'\x66', b'\x0F\x38', b'\x25', 1), # XXX ymm variant has mixed xmm/ymm args
+    'pmovzxbw':        (b'\x66', b'\x0F\x38', b'\x30', 1), # XXX ymm variant has mixed xmm/ymm args
+    'pmovzxbd':        (b'\x66', b'\x0F\x38', b'\x31', 1), # XXX ymm variant has mixed xmm/ymm args
+    'pmovzxbq':        (b'\x66', b'\x0F\x38', b'\x32', 1), # XXX ymm variant has mixed xmm/ymm args
+    'pmovzxwd':        (b'\x66', b'\x0F\x38', b'\x33', 1), # XXX ymm variant has mixed xmm/ymm args
+    'pmovzxwq':        (b'\x66', b'\x0F\x38', b'\x34', 1), # XXX ymm variant has mixed xmm/ymm args
+    'pmovzxdq':        (b'\x66', b'\x0F\x38', b'\x35', 1), # XXX ymm variant has mixed xmm/ymm args
+    'pmuldq':          (b'\x66', b'\x0F\x38', b'\x28', 0),
+    'pmulhrsw':        (b'\x66', b'\x0F\x38', b'\x0B', 0),
+    'pmulhuw':         (b'\x66', b'\x0F',     b'\xE4', 0),
+    'pmulhw':          (b'\x66', b'\x0F',     b'\xE5', 0),
+    'pmulld':          (b'\x66', b'\x0F\x38', b'\x40', 0),
+    'pmullw':          (b'\x66', b'\x0F',     b'\xD5', 0),
+    'pmuludq':         (b'\x66', b'\x0F',     b'\xF4', 0),
+    'por':             (b'\x66', b'\x0F',     b'\xEB', 0),
+    'psadbw':          (b'\x66', b'\x0F',     b'\xF6', 0),
+    'pshufb':          (b'\x66', b'\x0F\x38', b'\x00', 0),
+    'pshufd':          (b'\x66', b'\x0F',     b'\x70', 3),
+    'pshufhw':         (b'\xF3', b'\x0F',     b'\x70', 3),
+    'pshuflw':         (b'\xF2', b'\x0F',     b'\x70', 3),
     # XXX pshufw
-    'psignb':     (b'\x66', b'\x0F\x38', b'\x08', 1),
-    'psignw':     (b'\x66', b'\x0F\x38', b'\x09', 1),
-    'psignd':     (b'\x66', b'\x0F\x38', b'\x0A', 1),
+    'psignb':          (b'\x66', b'\x0F\x38', b'\x08', 1),
+    'psignw':          (b'\x66', b'\x0F\x38', b'\x09', 1),
+    'psignd':          (b'\x66', b'\x0F\x38', b'\x0A', 1),
     # XXX psll*, psra*, psrl*
-    'psubb':      (b'\x66', b'\x0F',     b'\xF8', 0),
-    'psubw':      (b'\x66', b'\x0F',     b'\xF9', 0),
-    'psubd':      (b'\x66', b'\x0F',     b'\xFA', 0),
-    'psubq':      (b'\x66', b'\x0F',     b'\xFB', 0),
-    'psubsb':     (b'\x66', b'\x0F',     b'\xE8', 0),
-    'psubsw':     (b'\x66', b'\x0F',     b'\xE9', 0),
-    'psubusb':    (b'\x66', b'\x0F',     b'\xD8', 0),
-    'psubusw':    (b'\x66', b'\x0F',     b'\xD9', 0),
+    'psubb':           (b'\x66', b'\x0F',     b'\xF8', 0),
+    'psubw':           (b'\x66', b'\x0F',     b'\xF9', 0),
+    'psubd':           (b'\x66', b'\x0F',     b'\xFA', 0),
+    'psubq':           (b'\x66', b'\x0F',     b'\xFB', 0),
+    'psubsb':          (b'\x66', b'\x0F',     b'\xE8', 0),
+    'psubsw':          (b'\x66', b'\x0F',     b'\xE9', 0),
+    'psubusb':         (b'\x66', b'\x0F',     b'\xD8', 0),
+    'psubusw':         (b'\x66', b'\x0F',     b'\xD9', 0),
     # XXX ptest
-    'punpckhbw':  (b'\x66', b'\x0F',     b'\x68', 0),
-    'punpckhwd':  (b'\x66', b'\x0F',     b'\x69', 0),
-    'punpckhdq':  (b'\x66', b'\x0F',     b'\x6A', 0),
-    'punpckhqdq': (b'\x66', b'\x0F',     b'\x6D', 0),
-    'punpcklbw':  (b'\x66', b'\x0F',     b'\x60', 0),
-    'punpcklwd':  (b'\x66', b'\x0F',     b'\x61', 0),
-    'punpckldq':  (b'\x66', b'\x0F',     b'\x62', 0),
-    'punpcklqdq': (b'\x66', b'\x0F',     b'\x6C', 0),
-    'pxor':       (b'\x66', b'\x0F',     b'\xEF', 0),
-    'rcpps':      (b'',     b'\x0F',     b'\x53', 1),
-    'rcpss':      (b'\xF3', b'\x0F',     b'\x53', 1), # XXX prohibit YMM register version
-    'roundpd':    (b'\x66', b'\x0F\x3A', b'\x09', 3),
-    'roundps':    (b'\x66', b'\x0F\x3A', b'\x08', 3),
-    'roundsd':    (b'\x66', b'\x0F\x3A', b'\x0B', 3), # XXX prohibit YMM register version
-    'roundss':    (b'\x66', b'\x0F\x3A', b'\x0A', 3), # XXX prohibit YMM register version
-    'rsqrtps':    (b'',     b'\x0F',     b'\x52', 1),
-    'rsqrtss':    (b'\xF3', b'\x0F',     b'\x52', 1), # XXX prohibit YMM register version
-    'shufpd':     (b'\x66', b'\x0F',     b'\xC6', 3),
-    'shufps':     (b'',     b'\x0F',     b'\xC6', 3),
-    'sqrtpd':     (b'\x66', b'\x0F',     b'\x51', 1),
-    'sqrtps':     (b'',     b'\x0F',     b'\x51', 1),
-    'sqrtsd':     (b'\xF2', b'\x0F',     b'\x51', 1), # XXX prohibit YMM register version
-    'sqrtss':     (b'\xF3', b'\x0F',     b'\x51', 1), # XXX prohibit YMM register version
-    'subps':      (b'',     b'\x0F',     b'\x5C', 0),
-    'subpd':      (b'\x66', b'\x0F',     b'\x5C', 0),
-    'subss':      (b'\xF3', b'\x0F',     b'\x5C', 0), # XXX prohibit YMM register version
-    'subsd':      (b'\xF2', b'\x0F',     b'\x5C', 0), # XXX prohibit YMM register version
-    'ucomisd':    (b'\x66', b'\x0F',     b'\x2E', 0), # XXX prohibit YMM register version
-    'ucomiss':    (b'',     b'\x0F',     b'\x2E', 0), # XXX prohibit YMM register version
-    'unpckhpd':   (b'\x66', b'\x0F',     b'\x15', 0),
-    'unpckhps':   (b'',     b'\x0F',     b'\x15', 0),
-    'unpcklpd':   (b'\x66', b'\x0F',     b'\x14', 0),
-    'unpcklps':   (b'',     b'\x0F',     b'\x14', 0),
-    'xorpd':      (b'\x66', b'\x0F',     b'\x57', 0),
-    'xorps':      (b'',     b'\x0F',     b'\x57', 0),
+    'punpckhbw':       (b'\x66', b'\x0F',     b'\x68', 0),
+    'punpckhwd':       (b'\x66', b'\x0F',     b'\x69', 0),
+    'punpckhdq':       (b'\x66', b'\x0F',     b'\x6A', 0),
+    'punpckhqdq':      (b'\x66', b'\x0F',     b'\x6D', 0),
+    'punpcklbw':       (b'\x66', b'\x0F',     b'\x60', 0),
+    'punpcklwd':       (b'\x66', b'\x0F',     b'\x61', 0),
+    'punpckldq':       (b'\x66', b'\x0F',     b'\x62', 0),
+    'punpcklqdq':      (b'\x66', b'\x0F',     b'\x6C', 0),
+    'pxor':            (b'\x66', b'\x0F',     b'\xEF', 0),
+    'rcpps':           (b'',     b'\x0F',     b'\x53', 1),
+    'rcpss':           (b'\xF3', b'\x0F',     b'\x53', 1), # XXX prohibit YMM register version
+    'roundpd':         (b'\x66', b'\x0F\x3A', b'\x09', 3),
+    'roundps':         (b'\x66', b'\x0F\x3A', b'\x08', 3),
+    'roundsd':         (b'\x66', b'\x0F\x3A', b'\x0B', 3), # XXX prohibit YMM register version
+    'roundss':         (b'\x66', b'\x0F\x3A', b'\x0A', 3), # XXX prohibit YMM register version
+    'rsqrtps':         (b'',     b'\x0F',     b'\x52', 1),
+    'rsqrtss':         (b'\xF3', b'\x0F',     b'\x52', 1), # XXX prohibit YMM register version
+    'shufpd':          (b'\x66', b'\x0F',     b'\xC6', 3),
+    'shufps':          (b'',     b'\x0F',     b'\xC6', 3),
+    'sqrtpd':          (b'\x66', b'\x0F',     b'\x51', 1),
+    'sqrtps':          (b'',     b'\x0F',     b'\x51', 1),
+    'sqrtsd':          (b'\xF2', b'\x0F',     b'\x51', 1), # XXX prohibit YMM register version
+    'sqrtss':          (b'\xF3', b'\x0F',     b'\x51', 1), # XXX prohibit YMM register version
+    'subps':           (b'',     b'\x0F',     b'\x5C', 0),
+    'subpd':           (b'\x66', b'\x0F',     b'\x5C', 0),
+    'subss':           (b'\xF3', b'\x0F',     b'\x5C', 0), # XXX prohibit YMM register version
+    'subsd':           (b'\xF2', b'\x0F',     b'\x5C', 0), # XXX prohibit YMM register version
+    'ucomisd':         (b'\x66', b'\x0F',     b'\x2E', 0), # XXX prohibit YMM register version
+    'ucomiss':         (b'',     b'\x0F',     b'\x2E', 0), # XXX prohibit YMM register version
+    'unpckhpd':        (b'\x66', b'\x0F',     b'\x15', 0),
+    'unpckhps':        (b'',     b'\x0F',     b'\x15', 0),
+    'unpcklpd':        (b'\x66', b'\x0F',     b'\x14', 0),
+    'unpcklps':        (b'',     b'\x0F',     b'\x14', 0),
+    'xorpd':           (b'\x66', b'\x0F',     b'\x57', 0),
+    'xorps':           (b'',     b'\x0F',     b'\x57', 0),
 
-    'psllw':      (b'\x66', b'\x0F',     b'\xF1', 0),
-    'pslld':      (b'\x66', b'\x0F',     b'\xF2', 0),
-    'psllq':      (b'\x66', b'\x0F',     b'\xF3', 0),
-    'psrlw':      (b'\x66', b'\x0F',     b'\xD1', 0),
-    'psrld':      (b'\x66', b'\x0F',     b'\xD2', 0),
-    'psrlq':      (b'\x66', b'\x0F',     b'\xD3', 0),
+    'psllw':           (b'\x66', b'\x0F',     b'\xF1', 0),
+    'pslld':           (b'\x66', b'\x0F',     b'\xF2', 0),
+    'psllq':           (b'\x66', b'\x0F',     b'\xF3', 0),
+    'psrlw':           (b'\x66', b'\x0F',     b'\xD1', 0),
+    'psrld':           (b'\x66', b'\x0F',     b'\xD2', 0),
+    'psrlq':           (b'\x66', b'\x0F',     b'\xD3', 0),
 
-    'cvtsd2ss':   (b'\xF2', b'\x0F',     b'\x5A', 1),
-    'cvtss2sd':   (b'\xF3', b'\x0F',     b'\x5A', 1),
+    'cvtsd2ss':        (b'\xF2', b'\x0F',     b'\x5A', 1),
+    'cvtss2sd':        (b'\xF3', b'\x0F',     b'\x5A', 1),
 
-    'cmpps':      (b'',     b'\x0F',     b'\xC2', 2),
-    'cmppd':      (b'\x66', b'\x0F',     b'\xC2', 2),
+    'cmpps':           (b'',     b'\x0F',     b'\xC2', 2),
+    'cmppd':           (b'\x66', b'\x0F',     b'\xC2', 2),
 
-    'movapd':     (b'\x66', b'\x0F',     b'\x28', 1),
-    'movaps':     (b'',     b'\x0F',     b'\x28', 1),
-    'storeapd':   (b'\x66', b'\x0F',     b'\x29', 1),
-    'storeaps':   (b'',     b'\x0F',     b'\x29', 1),
-    'movsd':      (b'\xF2', b'\x0F',     b'\x10', 0),
-    'movss':      (b'\xF3', b'\x0F',     b'\x10', 0),
-    'storesd':    (b'\xF2', b'\x0F',     b'\x11', 0),
-    'storess':    (b'\xF3', b'\x0F',     b'\x11', 0),
-    'movupd':     (b'\x66', b'\x0F',     b'\x10', 1),
-    'movups':     (b'',     b'\x0F',     b'\x10', 1),
-    'storeupd':   (b'\x66', b'\x0F',     b'\x11', 1),
-    'storeups':   (b'',     b'\x0F',     b'\x11', 1),
-    'movdqa':     (b'\x66', b'\x0F',     b'\x6F', 1),
-    'storedqa':   (b'\x66', b'\x0F',     b'\x7F', 1),
-    'movdqu':     (b'\xF3', b'\x0F',     b'\x6F', 1),
-    'storedqu':   (b'\xF3', b'\x0F',     b'\x7F', 1),
-
-    'aesdec':     (b'\x66', b'\x0F\x38', b'\xDE', 0), # XXX prohibit YMM register version
-    'aesdeclast': (b'\x66', b'\x0F\x38', b'\xDF', 0), # XXX prohibit YMM register version
-    'aesenc':     (b'\x66', b'\x0F\x38', b'\xDC', 0), # XXX prohibit YMM register version
-    'aesenclast': (b'\x66', b'\x0F\x38', b'\xDD', 0), # XXX prohibit YMM register version
+    'movapd':          (b'\x66', b'\x0F',     b'\x28', 1),
+    'movaps':          (b'',     b'\x0F',     b'\x28', 1),
+    'storeapd':        (b'\x66', b'\x0F',     b'\x29', 1),
+    'storeaps':        (b'',     b'\x0F',     b'\x29', 1),
+    'movsd':           (b'\xF2', b'\x0F',     b'\x10', 0),
+    'movss':           (b'\xF3', b'\x0F',     b'\x10', 0),
+    'storesd':         (b'\xF2', b'\x0F',     b'\x11', 0),
+    'storess':         (b'\xF3', b'\x0F',     b'\x11', 0),
+    'movupd':          (b'\x66', b'\x0F',     b'\x10', 1),
+    'movups':          (b'',     b'\x0F',     b'\x10', 1),
+    'storeupd':        (b'\x66', b'\x0F',     b'\x11', 1),
+    'storeups':        (b'',     b'\x0F',     b'\x11', 1),
+    'movdqa':          (b'\x66', b'\x0F',     b'\x6F', 1),
+    'storedqa':        (b'\x66', b'\x0F',     b'\x7F', 1),
+    'movdqu':          (b'\xF3', b'\x0F',     b'\x6F', 1),
+    'storedqu':        (b'\xF3', b'\x0F',     b'\x7F', 1),
 }
 
 sse_compare_functions = {'eq': 0, 'lt': 1, 'le': 2, 'unord': 3, 'neq': 4, 'nlt': 5, 'nle': 6, 'ord': 7}
@@ -960,14 +998,13 @@ class Parser:
             r_src = xmm_reg_nums[args[1]]
             self.code += prefix + rex(w, r_dst, 0, r_src) + b'\x0F\x2C' + mod_rm_reg(r_dst, r_src)
             return
-        if name == 'ldmxcsr':
+
+        if name in mem_only_opcodes:
             assert len(args) == 1
-            self.code += rex_addr(0, 0, args[0]) + b'\x0F\xAE' + mod_rm_addr(2, args[0])
+            (w, opcode, sub_opcode) = mem_only_opcodes[name]
+            self.code += rex_addr(w, 0, args[0]) + opcode + mod_rm_addr(sub_opcode, args[0])
             return
-        if name == 'stmxcsr':
-            assert len(args) == 1
-            self.code += rex_addr(0, 0, args[0]) + b'\x0F\xAE' + mod_rm_addr(3, args[0])
-            return
+
         if name == 'push':
             assert len(args) == 1
             if args[0] == 'fs':
