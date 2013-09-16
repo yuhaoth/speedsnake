@@ -545,12 +545,20 @@ avx_opcodes = {
     #                w  p  m  opcode   template
     'vblendvpd':    (0, 1, 3, b'\x4B', 5),
     'vblendvps':    (0, 1, 3, b'\x4A', 5),
-    'vbroadcastss': (0, 1, 2, b'\x18', 1),
+    'vbroadcastf128': (0, 1, 2, b'\x1A', 1), # XXX has no register-only version
+    'vbroadcasti128': (0, 1, 2, b'\x5A', 1), # XXX has no register-only version
+    'vbroadcastsd': (0, 1, 2, b'\x19', 1), # XXX ymm variant has mixed xmm/ymm args
+    'vbroadcastss': (0, 1, 2, b'\x18', 1), # XXX ymm variant has mixed xmm/ymm args
     'vcvtph2ps':    (0, 1, 2, b'\x13', 1), # XXX ymm variant has mixed xmm/ymm args
     'vcvtps2ph':    (0, 1, 3, b'\x1D', 3), # XXX ymm variant has mixed xmm/ymm args
     'vinsertf128':  (0, 1, 3, b'\x18', 4),
     'vmaskmovps':   (0, 1, 2, b'\x2E', 5),
     'vpblendvb':    (0, 1, 3, b'\x4C', 5),
+    'vpblendd':     (0, 1, 3, b'\x02', 2),
+    'vpbroadcastb': (0, 1, 2, b'\x78', 1), # XXX ymm variant has mixed xmm/ymm args
+    'vpbroadcastw': (0, 1, 2, b'\x79', 1), # XXX ymm variant has mixed xmm/ymm args
+    'vpbroadcastd': (0, 1, 2, b'\x58', 1), # XXX ymm variant has mixed xmm/ymm args
+    'vpbroadcastq': (0, 1, 2, b'\x59', 1), # XXX ymm variant has mixed xmm/ymm args
     'vpsllvd':      (0, 1, 2, b'\x47', 0),
     'vpsllvq':      (1, 1, 2, b'\x47', 0),
     'vpsravd':      (0, 1, 2, b'\x46', 0),
