@@ -95,17 +95,23 @@ r = re.compile('|'.join('(?P<%s>%s)' % pair for pair in tokens)).match
 w_regs = {'w%d' % i: i for i in range(31)}
 x_regs = {'x%d' % i: i for i in range(31)}
 
+# XXX crc32*, smulh, umulh
 logic_ops = {
-    'and': (0, 0),
-    'bic': (0, 1),
-    'orr': (1, 0),
-    'orn': (1, 1),
-    'eor': (2, 0),
-    'eon': (2, 1),
-    'ands': (3, 0),
-    'bics': (3, 1),
+    'and': (0, 0), 'bic': (0, 1),
+    'orr': (1, 0), 'orn': (1, 1),
+    'eor': (2, 0), 'eon': (2, 1),
+    'ands': (3, 0), 'bics': (3, 1),
 }
-
+dp_1_src = {'rbit': 0, 'rev16': 1, 'rev32': 2, 'rev': 3, 'clz': 4, 'cls': 5}
+dp_2_src = {'udiv': 2, 'sdiv': 3, 'lslv': 8, 'lsrv': 9, 'asrv': 10, 'rorv': 11}
+dp_3_src = {
+    'madd': (0, 0),
+    'msub': (0, 1),
+    'smaddl': (1, 0),
+    'smsubl': (1, 1),
+    'umaddl': (5, 0),
+    'umsubl': (5, 1),
+}
 shift_mod_types = {'lsl': 0, 'lsr': 1, 'asr': 2}
 
 class ShiftModifier:
@@ -161,12 +167,11 @@ class Parser:
         if name == 'ret':
             if not args:
                 args = ['x30']
-            assert len(args) == 1
+            assert len(args) == 1, args
             reg = x_regs[args[0]]
-            self.code += struct.pack('<I', 0xD65F0000 | (reg << 5))
-            return
-        if name in {'add', 'adds', 'sub', 'subs'}:
-            assert 3 <= len(args) <= 4
+            inst = 0xD65F0000 | (reg << 5)
+        elif name in {'add', 'adds', 'sub', 'subs'}:
+            assert 3 <= len(args) <= 4, args
             shift = 0
             imm = 0
             if len(args) == 4:
@@ -178,31 +183,78 @@ class Parser:
             r_dst = x_regs[args[0]] if sf else w_regs[args[0]]
             r_src0 = x_regs[args[1]] if sf else w_regs[args[1]]
             r_src1 = x_regs[args[2]] if sf else w_regs[args[2]]
-            self.code += struct.pack('<I', 0x0B000000 | (sf << 31) | (op << 30) | (s << 29) | (shift << 22) | (imm << 10) | (r_src1 << 16) | (r_src0 << 5) | r_dst)
-            return
-        if name in logic_ops:
-            assert len(args) == 3
+            inst = 0x0B000000 | (sf << 31) | (op << 30) | (s << 29) | (shift << 22) | (r_src1 << 16) | (imm << 10) | (r_src0 << 5) | r_dst
+        elif name in {'adc', 'adcs', 'sbc', 'sbcs'}:
+            assert len(args) == 3, args
+            sf = args[0] in x_regs
+            op = name in {'sbc', 'sbcs'}
+            s = name in {'adcs', 'sbcs'}
+            r_dst = x_regs[args[0]] if sf else w_regs[args[0]]
+            r_src0 = x_regs[args[1]] if sf else w_regs[args[1]]
+            r_src1 = x_regs[args[2]] if sf else w_regs[args[2]]
+            inst = 0x1A000000 | (sf << 31) | (op << 30) | (s << 29) | (r_src1 << 16) | (r_src0 << 5) | r_dst
+        elif name in logic_ops:
+            assert 3 <= len(args) <= 4, args
+            shift = 0
+            imm = 0
+            if len(args) == 4:
+                shift = args[3].shift
+                imm = args[3].imm
             sf = args[0] in x_regs
             (opc, n) = logic_ops[name]
             r_dst = x_regs[args[0]] if sf else w_regs[args[0]]
             r_src0 = x_regs[args[1]] if sf else w_regs[args[1]]
             r_src1 = x_regs[args[2]] if sf else w_regs[args[2]]
-            self.code += struct.pack('<I', 0x0A000000 | (sf << 31) | (opc << 29) | (n << 21) | (r_src1 << 16) | (r_src0 << 5) | r_dst)
-            return
-        if name == 'mov':
-            assert len(args) == 2
+            inst = 0x0A000000 | (sf << 31) | (opc << 29) | (shift << 22) | (n << 21) | (r_src1 << 16) | (imm << 10) | (r_src0 << 5) | r_dst
+        elif name in dp_1_src:
+            assert len(args) == 2, args
             sf = args[0] in x_regs
-            assert isinstance(args[1], int)
+            if not sf:
+                assert name != 'rev32'
+                if name == 'rev':
+                    name = 'rev32'
+            opcode = dp_1_src[name]
+            r_dst = x_regs[args[0]] if sf else w_regs[args[0]]
+            r_src = x_regs[args[1]] if sf else w_regs[args[1]]
+            inst = 0x5AC00000 | (sf << 31) | (opcode << 10) | (r_src << 5) | r_dst
+        elif name in dp_2_src:
+            assert len(args) == 3, args
+            sf = args[0] in x_regs
+            opcode = dp_2_src[name]
+            r_dst = x_regs[args[0]] if sf else w_regs[args[0]]
+            r_src0 = x_regs[args[1]] if sf else w_regs[args[1]]
+            r_src1 = x_regs[args[2]] if sf else w_regs[args[2]]
+            inst = 0x1AC00000 | (sf << 31) | (opcode << 10) | (r_src1 << 16) | (r_src0 << 5) | r_dst
+        elif name in dp_3_src:
+            assert len(args) == 4, args
+            sf = args[0] in x_regs
+            (o31, o0) = dp_3_src[name]
+            if name in {'smaddl', 'smsubl', 'umaddl', 'umsubl'}:
+                assert sf
+                r_dst = x_regs[args[0]]
+                r_src0 = w_regs[args[1]]
+                r_src1 = w_regs[args[2]]
+                r_src2 = x_regs[args[3]]
+            else:
+                r_dst = x_regs[args[0]] if sf else w_regs[args[0]]
+                r_src0 = x_regs[args[1]] if sf else w_regs[args[1]]
+                r_src1 = x_regs[args[2]] if sf else w_regs[args[2]]
+                r_src2 = x_regs[args[3]] if sf else w_regs[args[3]]
+            inst = 0x1B000000 | (sf << 31) | (o31 << 21) | (o0 << 15) | (r_src1 << 16) | (r_src2 << 10) | (r_src0 << 5) | r_dst
+        elif name == 'mov':
+            assert len(args) == 2, args
+            sf = args[0] in x_regs
+            assert isinstance(args[1], int), args[1]
             r_dst = x_regs[args[0]] if sf else w_regs[args[0]]
             imm = args[1]
             shift = 0
             while imm >= 0x10000 and not (imm & 0xFFFF):
                 imm >>= 16
                 shift += 1
-            self.code += struct.pack('<I', 0x52800000 | (sf << 31) | (shift << 21) | (imm << 5) | r_dst)
-            return
-
-        raise RuntimeError("don't know how to parse line %s" % tokens)
+            inst = 0x52800000 | (sf << 31) | (shift << 21) | (imm << 5) | r_dst
+        else:
+            raise RuntimeError("don't know how to parse line %s" % tokens)
+        self.code += struct.pack('<I', inst)
 
 def asm(filename):
     parser = Parser()
