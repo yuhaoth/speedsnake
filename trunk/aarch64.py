@@ -112,6 +112,7 @@ dp_3_src = {
     'umaddl': (5, 0),
     'umsubl': (5, 1),
 }
+hint_aliases = {'nop': 0, 'yield': 1, 'wfe': 2, 'wfi': 3, 'sev': 4, 'sevl': 5}
 shift_mod_types = {'lsl': 0, 'lsr': 1, 'asr': 2}
 
 class ShiftModifier:
@@ -170,6 +171,13 @@ class Parser:
             assert len(args) == 1, args
             reg = x_regs[args[0]]
             inst = 0xD65F0000 | (reg << 5)
+        elif name == 'hint':
+            assert len(args) == 1, args
+            assert isinstance(args[0], int)
+            assert 0 <= args[0] <= 127
+            inst = 0xD503201F | (args[0] << 5)
+        elif name in hint_aliases:
+            inst = 0xD503201F | (hint_aliases[name] << 5)
         elif name in {'add', 'adds', 'sub', 'subs'}:
             assert 3 <= len(args) <= 4, args
             sf = args[0] in x_regs
