@@ -172,18 +172,27 @@ class Parser:
             inst = 0xD65F0000 | (reg << 5)
         elif name in {'add', 'adds', 'sub', 'subs'}:
             assert 3 <= len(args) <= 4, args
-            shift = 0
-            imm = 0
-            if len(args) == 4:
-                shift = args[3].shift
-                imm = args[3].imm
             sf = args[0] in x_regs
             op = name in {'sub', 'subs'}
             s = name in {'adds', 'subs'}
             r_dst = x_regs[args[0]] if sf else w_regs[args[0]]
             r_src0 = x_regs[args[1]] if sf else w_regs[args[1]]
-            r_src1 = x_regs[args[2]] if sf else w_regs[args[2]]
-            inst = 0x0B000000 | (sf << 31) | (op << 30) | (s << 29) | (shift << 22) | (r_src1 << 16) | (imm << 10) | (r_src0 << 5) | r_dst
+            if isinstance(args[2], int):
+                imm = args[2]
+                shift = 0
+                if imm >= 0x1000 and not (imm & 0xFFF):
+                    imm >>= 12
+                    shift = 1
+                assert 0 <= imm <= 0xFFF
+                inst = 0x11000000 | (sf << 31) | (op << 30) | (s << 29) | (shift << 22) | (imm << 10) | (r_src0 << 5) | r_dst
+            else:
+                shift = 0
+                imm = 0
+                if len(args) == 4:
+                    shift = args[3].shift
+                    imm = args[3].imm
+                r_src1 = x_regs[args[2]] if sf else w_regs[args[2]]
+                inst = 0x0B000000 | (sf << 31) | (op << 30) | (s << 29) | (shift << 22) | (r_src1 << 16) | (imm << 10) | (r_src0 << 5) | r_dst
         elif name in {'adc', 'adcs', 'sbc', 'sbcs'}:
             assert len(args) == 3, args
             sf = args[0] in x_regs
