@@ -115,6 +115,14 @@ dp_3_src = {
 hint_aliases = {'nop': 0, 'yield': 1, 'wfe': 2, 'wfi': 3, 'sev': 4, 'sevl': 5}
 shift_mod_types = {'lsl': 0, 'lsr': 1, 'asr': 2}
 
+sys_regs = {
+    'scr_el3':    (3,  1, 6, 1, 0),
+    'cptr_el3':   (3,  1, 6, 1, 2),
+    'spsr_el3':   (3,  4, 6, 0, 0),
+    'elr_el3':    (3,  4, 6, 0, 1),
+    'cntfrq_el0': (3, 14, 3, 0, 0),
+}
+
 class ShiftModifier:
     def __init__(self, shift, imm):
         self.shift = shift_mod_types[shift]
@@ -197,6 +205,7 @@ class Parser:
                 shift = 0
                 imm = 0
                 if len(args) == 4:
+                    assert isinstance(args[3], ShiftModifier), args[3]
                     shift = args[3].shift
                     imm = args[3].imm
                 r_src1 = x_regs[args[2]] if sf else w_regs[args[2]]
@@ -212,17 +221,35 @@ class Parser:
             inst = 0x1A000000 | (sf << 31) | (op << 30) | (s << 29) | (r_src1 << 16) | (r_src0 << 5) | r_dst
         elif name in logic_ops:
             assert 3 <= len(args) <= 4, args
-            shift = 0
-            imm = 0
-            if len(args) == 4:
-                shift = args[3].shift
-                imm = args[3].imm
-            sf = args[0] in x_regs
-            (opc, n) = logic_ops[name]
-            r_dst = x_regs[args[0]] if sf else w_regs[args[0]]
-            r_src0 = x_regs[args[1]] if sf else w_regs[args[1]]
-            r_src1 = x_regs[args[2]] if sf else w_regs[args[2]]
-            inst = 0x0A000000 | (sf << 31) | (opc << 29) | (shift << 22) | (n << 21) | (r_src1 << 16) | (imm << 10) | (r_src0 << 5) | r_dst
+            if isinstance(args[2], int):
+                assert len(args) == 3, args
+                sf = args[0] in x_regs
+                assert sf # XXX
+                r_dst = x_regs[args[0]] if sf else w_regs[args[0]]
+                r_src0 = x_regs[args[1]] if sf else w_regs[args[1]]
+                imm = args[2]
+                (opc, n) = logic_ops[name]
+                if n:
+                    imm ^= 0xFFFFFFFFFFFFFFFF
+                if imm == 0x400:
+                    (n, immr, imms) = (1, 54, 0) # 1 ROR 54
+                elif imm == 0xFFFFFFFFFFFFFBFF:
+                    (n, immr, imms) = (1, 53, 62) # (63 1 bits) ROR 53
+                else:
+                    assert False, imm
+                inst = 0x12000000 | (sf << 31) | (opc << 29) | (n << 22) | (immr << 16) | (imms << 10) | (r_src0 << 5) | r_dst
+            else:
+                shift = 0
+                imm = 0
+                if len(args) == 4:
+                    shift = args[3].shift
+                    imm = args[3].imm
+                sf = args[0] in x_regs
+                (opc, n) = logic_ops[name]
+                r_dst = x_regs[args[0]] if sf else w_regs[args[0]]
+                r_src0 = x_regs[args[1]] if sf else w_regs[args[1]]
+                r_src1 = x_regs[args[2]] if sf else w_regs[args[2]]
+                inst = 0x0A000000 | (sf << 31) | (opc << 29) | (shift << 22) | (n << 21) | (r_src1 << 16) | (imm << 10) | (r_src0 << 5) | r_dst
         elif name in dp_1_src:
             assert len(args) == 2, args
             sf = args[0] in x_regs
@@ -269,11 +296,35 @@ class Parser:
                 imm >>= 16
                 shift += 1
             inst = 0x52800000 | (sf << 31) | (shift << 21) | (imm << 5) | r_dst
+        elif name == 'movk':
+            assert len(args) == 3, args
+            sf = args[0] in x_regs
+            assert isinstance(args[1], int), args[1]
+            assert isinstance(args[2], ShiftModifier), args[2]
+            assert args[2].shift == 0 # must be LSL
+            assert args[2].imm == 16
+            r_dst = x_regs[args[0]] if sf else w_regs[args[0]]
+            imm = args[1]
+            shift = 1
+            inst = 0x72800000 | (sf << 31) | (shift << 21) | (imm << 5) | r_dst
+        elif name == 'msr':
+            assert len(args) == 2, args
+            r_src = x_regs[args[1]]
+            (o0, crn, op1, crm, op2) = sys_regs[args[0]]
+            inst = 0xD5100000 | (o0 << 19) | (op1 << 16) | (crn << 12) | (crm << 8) | (op2 << 5) | r_src
+        elif name == 'mrs':
+            assert len(args) == 2, args
+            r_dst = x_regs[args[0]]
+            (o0, crn, op1, crm, op2) = sys_regs[args[1]]
+            inst = 0xD5300000 | (o0 << 19) | (op1 << 16) | (crn << 12) | (crm << 8) | (op2 << 5) | r_dst
+        elif name == 'eret':
+            assert not args, args
+            inst = 0xD69F03E0
         else:
             raise RuntimeError("don't know how to parse line %s" % tokens)
         self.code += struct.pack('<I', inst)
 
-def asm(filename):
+def asm(filename, bin):
     parser = Parser()
     with open(filename) as f:
         for line in f:
@@ -285,15 +336,19 @@ def asm(filename):
 
             parser.line_to_code(line)
 
-    return make_elf(filename, parser.labels, parser.code)
+    if bin:
+        return parser.code
+    else:
+        return make_elf(filename, parser.labels, parser.code)
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--bin', action='store_true')
     parser.add_argument('input_filename')
     parser.add_argument('output_filename')
     args = parser.parse_args()
 
-    out = asm(args.input_filename)
+    out = asm(args.input_filename, args.bin)
     with open(args.output_filename, 'wb') as f:
         f.write(out)
 
