@@ -282,6 +282,11 @@ class ShiftModifier:
         self.shift = shift_mod_types[shift]
         self.imm = imm
 
+class Address:
+    def __init__(self, base, imm):
+        self.base = x_regs[base]
+        self.imm = imm
+
 class Parser:
     def __init__(self):
         self.labels = []
@@ -314,6 +319,11 @@ class Parser:
         if pos != len(line):
             raise RuntimeError('Unexpected character %r' % line[pos])
 
+        if len(tokens) >= 6 and tokens[3] == '[' and tokens[5] == ']':
+            tokens[3:6] = [Address(tokens[4], 0)]
+        if len(tokens) >= 8 and tokens[3] == '[' and tokens[5] == ',' and tokens[7] == ']':
+            assert isinstance(tokens[6], int)
+            tokens[3:8] = [Address(tokens[4], tokens[6])]
         if isinstance(tokens[-1], int) and tokens[-2] in shift_mod_types and tokens[-3] == ',':
             tokens[-2:] = [ShiftModifier(tokens[-2], tokens[-1])]
 
@@ -324,7 +334,7 @@ class Parser:
         else:
             assert not len(tokens) & 1
             for i in range(2, len(tokens), 2):
-                assert tokens[i] == ','
+                assert tokens[i] == ',', tokens
             args = tokens[1::2]
 
         if name == 'ret':
@@ -474,6 +484,22 @@ class Parser:
         elif name == 'eret':
             assert not args, args
             inst = 0xD69F03E0
+        elif name in {'str', 'strb', 'strh', 'ldr', 'ldrb', 'ldrh'}:
+            assert len(args) == 2, args
+            addr = args[1]
+            sf = args[0] in x_regs
+            if name in {'str', 'ldr'}:
+                size = 2 + sf
+            else:
+                assert not sf
+                size = 0 if name in {'strb', 'ldrb'} else 1
+            r_src = x_regs[args[0]] if sf else w_regs[args[0]]
+            assert addr.imm >= 0 and not addr.imm & ((1 << size) - 1), addr.imm
+            imm12 = addr.imm >> size
+            assert imm12 <= 0xFFF
+            inst = 0x39000000 | (size << 30) | (imm12 << 10) | (addr.base << 5) | r_src
+            if name in {'ldr', 'ldrb', 'ldrh'}:
+                inst |= 0x00400000
         else:
             raise RuntimeError("don't know how to parse line %s" % tokens)
         self.code += struct.pack('<I', inst)
