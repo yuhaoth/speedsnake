@@ -1127,6 +1127,7 @@ def main():
         global_s.asm_code = fw.getvalue()
 
     with open(args.output_filename, 'w') as f:
+        f.write('segment code\n\n')
         for i in sorted(mem_int_literals):
             f.write('const_0x%X:\n' % i)
             f.write('    dd 0x%X\n' % i)
