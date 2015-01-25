@@ -959,7 +959,7 @@ def main():
 
     # Read and parse the input
     lex.lex()
-    yacc.yacc()
+    yacc.yacc(write_tables=0) # inhibit production of parsetab.py -- hurts compiler startup time, but avoids file system pollution
     with open(args.input_filename) as f:
         data = f.read()
     lexer = lex.lexer
