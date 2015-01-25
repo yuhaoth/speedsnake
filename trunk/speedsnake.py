@@ -474,7 +474,7 @@ class Identifier(Expr):
             raise RuntimeError("undefined global '%s'" % self.name)
 
 class BuiltinFunction(Expr):
-    def __init__(self, name):    
+    def __init__(self, name):
         Expr.__init__(self)
         self.name = name
 
@@ -1029,7 +1029,7 @@ def main():
                     if args.windows:
                         s.reg = [1, 2, 8, 9][s.index] # rcx, rdx, r8, r9
                     else:
-                        s.reg = [7, 6, 2, 1, 8, 9][s.index] # rdi, rsi, rdx, rcx, r8, r9    
+                        s.reg = [7, 6, 2, 1, 8, 9][s.index] # rdi, rsi, rdx, rcx, r8, r9
                     s.reg_type = 'r'
                     s.ref_count = len(s.uses)
                     assert s.ref_count > 0
