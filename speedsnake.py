@@ -362,6 +362,9 @@ def p_atom_7(p):
     """atom : LBRACE key_value_list_comma RBRACE"""
     p[0] = DictLiteral(p[2])
 
+def p_error(p):
+    print('ERROR: syntax error in input file')
+
 n_temps = 0
 
 def flatten_expr_link(link, statements):
