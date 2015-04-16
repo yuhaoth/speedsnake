@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #
 # Speedsnake (http://code.google.com/p/speedsnake/)
-# Copyright (c) 2013 Matt Craighead
+# Copyright (c) 2013-2015 Matt Craighead
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 # associated documentation files (the "Software"), to deal in the Software without restriction,
@@ -73,6 +73,72 @@ def make_elf(filename, labels, globals, code):
         elf_file += pad_to_16b(section)
     elf_file[0x12C:0x130] = struct.pack('<I', 3 + len(labels) - len(globals)) # "one greater than the symbol table index of the last local symbol"
     return elf_file
+
+def make_mach_o(filename, labels, globals, code):
+    # Build string table (just a list of null-terminated strings for all the function names prepended with '_')
+    string_table = b'\0'
+    symbol_string_table_offsets = {}
+    for function in labels:
+        symbol_string_table_offsets[function[0]] = len(string_table)
+        string_table += ('_' + function[0]).encode() + b'\0' # XXX: should we be more seletive about adding '_'?
+
+    # Build symbol table (string-table-pointer -> code-offset), putting local symbols first
+    # struct nlist_64 { union { uint32_t n_strx; } n_un; uint8_t n_type; uint8_t n_sect; uint16_t n_desc; uint64_t n_value; };
+    symbol_table = b''
+    for function in labels:
+        if function[0] not in globals:
+            symbol_table += struct.pack('<IBBHQ', symbol_string_table_offsets[function[0]], 0xe, 1, 0x2, function[1])
+    for function in labels:
+        if function[0] in globals:
+            symbol_table += struct.pack('<IBBHQ', symbol_string_table_offsets[function[0]], 0xf, 1, 0x2, function[1])
+
+    mach_header_size = 32  # sizeof(mach_header_64)
+    segment_command_size = 72  # sizeof(segment_command_64)
+    segment_section_size = 80  # sizeof(section_64) + 4
+    symtab_command_size = 24  # sizeof(symtab_command)
+
+    nsects = 1
+    unknown_padding = 48
+    segment_cmd_size = segment_command_size + segment_section_size * nsects
+    text_off = mach_header_size + segment_cmd_size + symtab_command_size + unknown_padding
+
+    # struct section_64 { char sectname[16]; char segname[16]; uint64_t addr; uint64_t size; uint32_t offset; uint32_t align; uint32_t reloff; uint32_t nreloc; uint32_t flags; uint32_t reserved1; uint32_t reserved2; };
+    segment_section = pad_to_16b(b'__text')
+    segment_section += pad_to_16b(b'__TEXT')
+    segment_section += struct.pack('<QQIIIIIII', 0x0, len(code), text_off, 0x4, 0x0, 0x0, 1<<31 | 1<<10, 0x0, 0x0)
+    segment_section += bytes(4) # pad to 8-byte boundry
+    assert(len(segment_section) == segment_section_size)
+
+    LC_SEGMENT_64 = 0x19
+    # struct segment_command_64 { uint32_t cmd; uint32_t cmdsize; char segname[16]; uint64_t vmaddr; uint64_t vmsize; uint64_t fileoff; uint64_t filesize; vm_prot_t maxprot; vm_prot_t initprot; uint32_t nsects; uint32_t flags; };
+    segment_cmd = struct.pack('<IIQQQQQQIIII', LC_SEGMENT_64, segment_cmd_size, 0x0, 0x0, 0x0, len(code), text_off, len(code), 0x7, 0x7, nsects, 0x0)
+    assert(len(segment_cmd) == segment_command_size)
+
+    LC_SYMTAB = 0x2
+    code = pad_to_16b(code)
+    symtab_off = text_off + len(code)
+    nsyms = len(labels)
+    string_table_off = symtab_off + len(symbol_table)
+    strsize = len(string_table)
+    # struct symtab_command { uint_32 cmd; uint_32 cmdsize; uint_32 symoff; uint_32 nsyms; uint_32 stroff; uint_32 strsize; };
+    symbol_table_cmd = struct.pack('<IIIIII', LC_SYMTAB, 24, symtab_off, nsyms, string_table_off, strsize)
+    assert(len(symbol_table_cmd) == symtab_command_size)
+
+    ncmds = 2
+    cmdsize = len(segment_cmd) + len(segment_section) + len(symbol_table_cmd)
+    # struct mach_header_64 { uint32_t magic; cpu_type_t cputype; cpu_subtype_t cpusubtype; uint32_t filetype; uint32_t ncmds; uint32_t sizeofcmds; uint32_t flags; uint32_t reserved; };
+    mach_header = struct.pack('<IIIIIIII', 0xfeedfacf, 0x1000007, 0x3, 1, ncmds, cmdsize, 0x00002000, 0x0)
+    assert(len(mach_header) == mach_header_size)
+
+    mach_o_file = mach_header
+    mach_o_file += segment_cmd
+    mach_o_file += segment_section
+    mach_o_file += symbol_table_cmd
+    mach_o_file += bytes(unknown_padding)
+    mach_o_file += code
+    mach_o_file += symbol_table
+    mach_o_file += string_table
+    return mach_o_file
 
 def make_obj(filename, labels, globals, code):
     obj_file = struct.pack('<IIIIIIIIIIIIIII',
@@ -1285,7 +1351,8 @@ class Parser:
         else:
             raise RuntimeError("don't know how to parse line %s" % tokens)
 
-def asm(filename, windows):
+def asm(filename, platform):
+    windows = platform == 'windows'
     parser = Parser()
     if_stack = [True]
     with open(filename) as f:
@@ -1333,19 +1400,22 @@ def asm(filename, windows):
 
                 parser.line_to_code(line)
 
-    if windows:
+    if platform == 'windows':
         return make_obj(filename, parser.labels, parser.globals, parser.code)
+    elif platform == 'apple':
+        return make_mach_o(filename, parser.labels, parser.globals, parser.code)
     else:
         return make_elf(filename, parser.labels, parser.globals, parser.code)
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--windows', action='store_true')
+    parser.add_argument('--apple', dest='platform', action='store_const', const='apple', default='linux')
+    parser.add_argument('--windows', dest='platform', action='store_const', const='windows')
     parser.add_argument('input_filename')
     parser.add_argument('output_filename')
     args = parser.parse_args()
 
-    out = asm(args.input_filename, args.windows)
+    out = asm(args.input_filename, args.platform)
     with open(args.output_filename, 'wb') as f:
         f.write(out)
 
