@@ -1352,7 +1352,10 @@ class Parser:
             raise RuntimeError("don't know how to parse line %s" % tokens)
 
 def asm(filename, platform):
-    windows = platform == 'windows'
+    defines = set()
+    if platform == 'windows':
+        defines.add('_WIN32')
+
     parser = Parser()
     if_stack = [True]
     with open(filename) as f:
@@ -1377,11 +1380,11 @@ def asm(filename, platform):
                 parser.cur_macro_args = line[1:]
                 parser.cur_macro = []
                 continue
-            if line == '%ifdef _WIN32':
-                if_stack.append(windows)
+            if line.startswith('%ifdef '):
+                if_stack.append(line[7:] in defines)
                 continue
-            if line == '%ifndef _WIN32':
-                if_stack.append(not windows)
+            if line.startswith('%ifndef '):
+                if_stack.append(line[8:] not in defines)
                 continue
             if line == '%else':
                 if if_stack[-2] == True:
